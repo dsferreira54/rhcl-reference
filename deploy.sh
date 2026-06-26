@@ -20,6 +20,20 @@ done
 
 echo "ArgoCD openshift-gitops is Available."
 
+oc patch argocd openshift-gitops \
+  -n openshift-gitops \
+  --type merge \
+  -p '{
+    "spec": {
+      "controller": {
+        "appSync": "5s"
+      },
+      "extraConfig": {
+        "timeout.reconciliation.jitter": "0s"
+      }
+    }
+  }'
+
 echo "Granting cluster-admin to the ArgoCD application controller service account..."
 
 oc apply -f - <<'EOF'
@@ -56,7 +70,7 @@ import re
 import subprocess
 import sys
 
-POOL_SIZE = 10
+POOL_SIZE = 1
 
 
 def oc_json(args):

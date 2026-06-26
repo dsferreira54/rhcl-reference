@@ -1,7 +1,6 @@
 baseDns: rhcl.ocp.acme.com
-
+rhclVersion: 1.4.0
 metallb:
   ipAddressPool:
-    # Unused IPs on the cluster network, routable from clients.
     addresses:
       - 192.168.1.240-192.168.1.250

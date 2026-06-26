@@ -21,7 +21,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/Kuadrant/kuadrant-operator
-    targetRevision: v1.4.0
+    targetRevision: v{{ .Values.rhclVersion }}
     path: config/install/configure/observability
     kustomize:
       patches:

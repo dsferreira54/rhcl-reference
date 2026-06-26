@@ -4,7 +4,7 @@ kind: Namespace
 metadata:
   name: kuadrant-system
   annotations:
-    argocd.argoproj.io/sync-wave: "2"
+    argocd.argoproj.io/sync-wave: "7"
 ---
 apiVersion: operators.coreos.com/v1alpha1
 kind: Subscription
@@ -12,7 +12,7 @@ metadata:
   name: rhcl-operator
   namespace: openshift-operators
   annotations:
-    argocd.argoproj.io/sync-wave: "2"
+    argocd.argoproj.io/sync-wave: "7"
 spec:
   channel: stable
   installPlanApproval: Automatic
@@ -26,5 +26,5 @@ metadata:
   name: kuadrant
   namespace: kuadrant-system
   annotations:
-    argocd.argoproj.io/sync-wave: "3"
+    argocd.argoproj.io/sync-wave: "8"
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true

@@ -4,7 +4,7 @@ kind: Namespace
 metadata:
   name: poc-rhcl-hello-world-app
   annotations:
-    argocd.argoproj.io/sync-wave: "4"
+    argocd.argoproj.io/sync-wave: "9"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -12,7 +12,7 @@ metadata:
   name: hello-world-app
   namespace: poc-rhcl-hello-world-app
   annotations:
-    argocd.argoproj.io/sync-wave: "5"
+    argocd.argoproj.io/sync-wave: "10"
 spec:
   replicas: 1
   selector:
@@ -35,7 +35,7 @@ metadata:
   name: hello-world-app
   namespace: poc-rhcl-hello-world-app
   annotations:
-    argocd.argoproj.io/sync-wave: "5"
+    argocd.argoproj.io/sync-wave: "10"
 spec:
   selector:
     app: hello-world-app
@@ -52,7 +52,7 @@ metadata:
   name: hello-world-app
   namespace: poc-rhcl-hello-world-app
   annotations:
-    argocd.argoproj.io/sync-wave: "6"
+    argocd.argoproj.io/sync-wave: "11"
 spec:
   parentRefs:
   - name: main-gateway
@@ -74,7 +74,7 @@ metadata:
   name: hello-world-app
   namespace: poc-rhcl-hello-world-app
   annotations:
-    argocd.argoproj.io/sync-wave: "7"
+    argocd.argoproj.io/sync-wave: "12"
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   limits:

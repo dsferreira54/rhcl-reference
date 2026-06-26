@@ -80,7 +80,7 @@ spec:
   limits:
     my-limits:
       rates:
-        - limit: 5
+        - limit: 5000
           window: 10s
   targetRef:
     group: gateway.networking.k8s.io

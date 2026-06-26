@@ -23,16 +23,24 @@ spec:
     repoURL: https://github.com/Kuadrant/kuadrant-operator
     targetRevision: v1.4.0
     path: config/install/configure/observability
+    kustomize:
+      patches:
+        - target:
+            group: operators.coreos.com
+            version: v1alpha1
+            kind: Subscription
+            name: grafana-operator
+            namespace: openshift-operators
+          patch: |
+            $patch: delete
+            apiVersion: operators.coreos.com/v1alpha1
+            kind: Subscription
+            metadata:
+              name: grafana-operator
+              namespace: openshift-operators
   destination:
     server: https://kubernetes.default.svc
     namespace: gateway-system
-  ignoreDifferences:
-    - group: operators.coreos.com
-      kind: Subscription
-      name: grafana-operator
-      namespace: openshift-operators
-      jqPathExpressions:
-        - .
   syncPolicy:
     automated:
       prune: true
@@ -40,4 +48,3 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - SkipDryRunOnMissingResource=true
-      - RespectIgnoreDifferences=true

@@ -40,7 +40,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/dsferreira54/rhcl-reference
-    targetRevision: HEAD
+    targetRevision: main
     path: chart
     helm:
       parameters:

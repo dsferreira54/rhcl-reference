@@ -169,7 +169,7 @@ spec:
 apiVersion: grafana.integreatly.org/v1beta1
 kind: GrafanaDashboard
 metadata:
-  name: jvm-micrometer
+  name: app-developer-dashboard
   namespace: grafana
   annotations:
     argocd.argoproj.io/sync-wave: "18"
@@ -182,4 +182,58 @@ spec:
     - inputName: DS_PROMETHEUS
       datasourceName: Prometheus
   grafanaCom:
-    id: 4701
+    id: 21538
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDashboard
+metadata:
+  name: business-user-dashboard
+  namespace: grafana
+  annotations:
+    argocd.argoproj.io/sync-wave: "18"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  instanceSelector:
+    matchLabels:
+      dashboards: grafana
+  datasources:
+    - inputName: DS_PROMETHEUS
+      datasourceName: Prometheus
+  grafanaCom:
+    id: 20981
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDashboard
+metadata:
+  name: platform-engineer-dashboard
+  namespace: grafana
+  annotations:
+    argocd.argoproj.io/sync-wave: "18"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  instanceSelector:
+    matchLabels:
+      dashboards: grafana
+  datasources:
+    - inputName: DS_PROMETHEUS
+      datasourceName: Prometheus
+  grafanaCom:
+    id: 20982
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDashboard
+metadata:
+  name: dns-operator-dashboard
+  namespace: grafana
+  annotations:
+    argocd.argoproj.io/sync-wave: "18"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  instanceSelector:
+    matchLabels:
+      dashboards: grafana
+  datasources:
+    - inputName: DS_PROMETHEUS
+      datasourceName: Prometheus
+  grafanaCom:
+    id: 22695

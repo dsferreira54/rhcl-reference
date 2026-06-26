@@ -26,6 +26,13 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: gateway-system
+  ignoreDifferences:
+    - group: operators.coreos.com
+      kind: Subscription
+      name: grafana-operator
+      namespace: openshift-operators
+      jqPathExpressions:
+        - .
   syncPolicy:
     automated:
       prune: true
@@ -33,3 +40,4 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - SkipDryRunOnMissingResource=true
+      - RespectIgnoreDifferences=true

@@ -51,6 +51,10 @@ kind: HTTPRoute
 metadata:
   name: hello-world-app
   namespace: poc-rhcl-hello-world-app
+  labels:
+    app: hello-world-app
+    deployment: hello-world-app
+    service: hello-world-app
   annotations:
     argocd.argoproj.io/sync-wave: "11"
 spec:

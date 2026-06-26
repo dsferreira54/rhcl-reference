@@ -1,0 +1,185 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cluster-monitoring-config
+  namespace: openshift-monitoring
+  annotations:
+    argocd.argoproj.io/sync-wave: "13"
+data:
+  config.yaml: |
+    enableUserWorkload: true
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: grafana
+  annotations:
+    argocd.argoproj.io/sync-wave: "13"
+---
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  name: grafana-operator
+  namespace: grafana
+  annotations:
+    argocd.argoproj.io/sync-wave: "14"
+spec:
+  upgradeStrategy: Default
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: grafana-operator
+  namespace: grafana
+  annotations:
+    argocd.argoproj.io/sync-wave: "14"
+spec:
+  channel: v5
+  installPlanApproval: Automatic
+  name: grafana-operator
+  source: community-operators
+  sourceNamespace: openshift-marketplace
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: grafana
+  namespace: grafana
+  annotations:
+    argocd.argoproj.io/sync-wave: "15"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: grafana-admin-credentials
+  namespace: grafana
+  annotations:
+    argocd.argoproj.io/sync-wave: "15"
+type: Opaque
+stringData:
+  GF_SECURITY_ADMIN_USER: admin
+  GF_SECURITY_ADMIN_PASSWORD: admin123
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: grafana-sa-token
+  namespace: grafana
+  annotations:
+    argocd.argoproj.io/sync-wave: "15"
+    kubernetes.io/service-account.name: grafana
+type: kubernetes.io/service-account-token
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: grafana-cluster-monitoring-view
+  annotations:
+    argocd.argoproj.io/sync-wave: "15"
+subjects:
+  - kind: ServiceAccount
+    name: grafana
+    namespace: grafana
+roleRef:
+  kind: ClusterRole
+  name: cluster-monitoring-view
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: Grafana
+metadata:
+  name: grafana-instance
+  namespace: grafana
+  labels:
+    dashboards: grafana
+  annotations:
+    argocd.argoproj.io/sync-wave: "16"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  config:
+    log:
+      mode: console
+      level: warn
+    auth:
+      disable_login_form: "false"
+    auth.anonymous:
+      enabled: "false"
+    security:
+      admin_user: ${GF_SECURITY_ADMIN_USER}
+      admin_password: ${GF_SECURITY_ADMIN_PASSWORD}
+  deployment:
+    spec:
+      template:
+        spec:
+          serviceAccountName: grafana
+          containers:
+            - name: grafana
+              env:
+                - name: GF_SECURITY_ADMIN_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: grafana-admin-credentials
+                      key: GF_SECURITY_ADMIN_USER
+                - name: GF_SECURITY_ADMIN_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: grafana-admin-credentials
+                      key: GF_SECURITY_ADMIN_PASSWORD
+  route:
+    spec:
+      tls:
+        termination: edge
+        insecureEdgeTerminationPolicy: Redirect
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDatasource
+metadata:
+  name: openshift-thanos
+  namespace: grafana
+  annotations:
+    argocd.argoproj.io/sync-wave: "17"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  allowCrossNamespaceImport: false
+  datasource:
+    access: proxy
+    editable: true
+    isDefault: true
+    jsonData:
+      httpHeaderName1: Authorization
+      timeInterval: 5s
+      tlsSkipVerify: true
+    name: Prometheus
+    secureJsonData:
+      httpHeaderValue1: 'Bearer ${token}'
+    type: prometheus
+    url: 'https://thanos-querier.openshift-monitoring.svc:9091'
+  instanceSelector:
+    matchLabels:
+      dashboards: grafana
+  resyncPeriod: 10m0s
+  valuesFrom:
+    - targetPath: secureJsonData.httpHeaderValue1
+      valueFrom:
+        secretKeyRef:
+          key: token
+          name: grafana-sa-token
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDashboard
+metadata:
+  name: jvm-micrometer
+  namespace: grafana
+  annotations:
+    argocd.argoproj.io/sync-wave: "18"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  instanceSelector:
+    matchLabels:
+      dashboards: grafana
+  datasources:
+    - inputName: DS_PROMETHEUS
+      datasourceName: Prometheus
+  grafanaCom:
+    id: 4701

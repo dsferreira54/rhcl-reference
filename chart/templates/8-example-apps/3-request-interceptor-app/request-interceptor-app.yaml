@@ -1,0 +1,98 @@
+---
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: request-interceptor-app
+  namespace: example-apps
+  labels:
+    app: request-interceptor-app
+  annotations:
+    argocd.argoproj.io/sync-wave: "28"
+spec:
+  lookupPolicy:
+    local: false
+---
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: request-interceptor-app
+  namespace: example-apps
+  labels:
+    app: request-interceptor-app
+  annotations:
+    argocd.argoproj.io/sync-wave: "29"
+spec:
+  source:
+    type: Git
+    git:
+      uri: https://github.com/dsferreira54/request-interceptor.git
+      ref: main
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Containerfile
+  output:
+    to:
+      kind: ImageStreamTag
+      name: request-interceptor-app:latest
+  triggers:
+    - type: ConfigChange
+  successfulBuildsHistoryLimit: 5
+  failedBuildsHistoryLimit: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: request-interceptor-app
+  namespace: example-apps
+  labels:
+    app: request-interceptor-app
+  annotations:
+    argocd.argoproj.io/sync-wave: "30"
+spec:
+  selector:
+    app: request-interceptor-app
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: request-interceptor-app
+  namespace: example-apps
+  labels:
+    app: request-interceptor-app
+  annotations:
+    argocd.argoproj.io/sync-wave: "30"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: request-interceptor-app
+  template:
+    metadata:
+      labels:
+        app: request-interceptor-app
+    spec:
+      containers:
+        - name: request-interceptor-app
+          image: image-registry.openshift-image-registry.svc:5000/example-apps/request-interceptor-app:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: LOG_SENSITIVE_HEADERS
+              value: "true"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            initialDelaySeconds: 15
+            periodSeconds: 20

@@ -64,6 +64,7 @@ spec:
             failOpen: false
             includeRequestHeadersInCheck:
               - '*-*'
+              - '***'
             includeRequestBodyInCheck:
               maxRequestBytes: 8192
               allowPartialMessage: true

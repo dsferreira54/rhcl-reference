@@ -45,6 +45,7 @@ metadata:
   name: hello-world-app
   namespace: example-apps
   labels:
+    name: hello-world-app
     app: hello-world-app
     deployment: hello-world-app
     service: hello-world-app

@@ -72,5 +72,5 @@ spec:
               - x-forwarded-proto
               - user-agent
             includeRequestBodyInCheck:
-              maxRequestBytes: 8192
+              # maxRequestBytes: 8192
               allowPartialMessage: true

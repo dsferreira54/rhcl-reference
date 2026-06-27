@@ -58,7 +58,7 @@ metadata:
     argocd.argoproj.io/sync-wave: "20"
 type: Opaque
 stringData:
-  session_secret: eYLm0QseKh92AKAWvveKOTGqRm2jOQHWCtqk2vQgcyU=
+  session_secret: "eYLm0QseKh92AKAWvveKOTGqRm2jOQHWCtqk2vQgcyU="
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -182,8 +182,8 @@ spec:
                 - -http-address=
                 - -email-domain=*
                 - -upstream=http://localhost:3000
-                - -openshift-sar={"resource": "namespaces", "verb": "get"}
-                - -openshift-delegate-urls={"/": {"resource": "namespaces", "verb": "get"}}
+                - '-openshift-sar={"resource": "namespaces", "verb": "get"}'
+                - '-openshift-delegate-urls={"/": {"resource": "namespaces", "verb": "get"}}'
                 - -tls-cert=/etc/tls/private/tls.crt
                 - -tls-key=/etc/tls/private/tls.key
                 - -client-secret-file=/var/run/secrets/kubernetes.io/serviceaccount/token

@@ -1,1 +1,1 @@
-templates/3-gateway-api/standalone-gateway-api.yaml
+templates/3-gateway-api/envoy-gateway-api.yaml

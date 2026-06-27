@@ -62,32 +62,4 @@ spec:
   #       PILOT_ENABLE_GATEWAY_API: "true"
   #       PILOT_ENABLE_GATEWAY_API_DEPLOYMENT_CONTROLLER: "true"
   #       PILOT_ENABLE_GATEWAY_API_STATUS: "true"
-# ---
-# apiVersion: v1
-# kind: Namespace
-# metadata:
-#   name: istio-ingress
-#   labels:
-#     istio.io/rev: default
-#     openshift.io/cluster-monitoring: "true"
-#   annotations:
-#     argocd.argoproj.io/sync-wave: "9"
-# ---
-# apiVersion: gateway.networking.k8s.io/v1
-# kind: Gateway
-# metadata:
-#   name: main-istio-gateway
-#   namespace: istio-ingress
-#   annotations:
-#     argocd.argoproj.io/sync-wave: "10"
-#     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
-# spec:
-#   gatewayClassName: istio
-#   listeners:
-#   - name: http
-#     hostname: "*.{{ .Values.baseDns }}"
-#     port: 80
-#     protocol: HTTP
-#     allowedRoutes:
-#       namespaces:
-#         from: All
+

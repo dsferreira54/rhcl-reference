@@ -52,3 +52,28 @@ metadata:
 spec:
   namespace: istio-system
   version: v1.28-latest
+  values:
+    meshConfig:
+      extensionProviders:
+        - name: request-interceptor-provider
+          envoyExtAuthzHttp:
+            service: request-interceptor-app.example-apps.svc.cluster.local
+            port: 8080
+            pathPrefix: /check
+            timeout: 5s
+            failOpen: false
+            includeRequestHeadersInCheck:
+              - authorization
+              - content-type
+              - x-request-id
+              - x-forwarded-for
+              - x-forwarded-host
+              - x-forwarded-proto
+              - user-agent
+            includeRequestBodyInCheck:
+              maxRequestBytes: 8192
+              allowPartialMessage: true
+            headersToUpstreamOnAllow:
+              - x-inspected-by
+              - x-inspection-result
+              - x-request-interceptor-mode

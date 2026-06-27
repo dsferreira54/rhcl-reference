@@ -52,14 +52,3 @@ metadata:
 spec:
   namespace: istio-system
   version: v1.28-latest
-  # updateStrategy:
-  #   type: InPlace
-  # values:
-  #   meshConfig:
-  #     accessLogFile: /dev/stdout
-  #   pilot:
-  #     env:
-  #       PILOT_ENABLE_GATEWAY_API: "true"
-  #       PILOT_ENABLE_GATEWAY_API_DEPLOYMENT_CONTROLLER: "true"
-  #       PILOT_ENABLE_GATEWAY_API_STATUS: "true"
-

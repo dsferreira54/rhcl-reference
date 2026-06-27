@@ -52,6 +52,7 @@ metadata:
 spec:
   namespace: istio-system
   version: v1.28-latest
+{{- if .Values.helloWorldApp.requestInterceptor.externalAuthorization.enabled }}
   values:
     meshConfig:
       extensionProviders:
@@ -74,3 +75,4 @@ spec:
             includeRequestBodyInCheck:
               maxRequestBytes: 8192
               allowPartialMessage: true
+{{- end }}

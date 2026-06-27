@@ -61,12 +61,14 @@ spec:
     - path:
         type: PathPrefix
         value: /
+    {{- if .Values.helloWorldApp.requestInterceptor.requestMirror.enabled }}
     filters:
     - type: RequestMirror
       requestMirror:
         backendRef:
           name: request-interceptor-app
           port: 8080
+    {{- end }}
     backendRefs:
     - name: hello-world-app
       port: 8080
@@ -89,25 +91,27 @@ spec:
     group: gateway.networking.k8s.io
     kind: HTTPRoute
     name: hello-world-app
-# ---
-# apiVersion: security.istio.io/v1
-# kind: AuthorizationPolicy
-# metadata:
-#   name: hello-world-ext-authz
-#   namespace: istio-ingress
-#   annotations:
-#     argocd.argoproj.io/sync-wave: "31"
-#     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
-# spec:
-#   targetRef:
-#     group: gateway.networking.k8s.io
-#     kind: Gateway
-#     name: main-gateway
-#   action: CUSTOM
-#   provider:
-#     name: request-interceptor-provider
-#   rules:
-#     - to:
-#         - operation:
-#             hosts:
-#               - hello-world-app.{{ .Values.baseDns }}
+{{- if .Values.helloWorldApp.requestInterceptor.externalAuthorization.enabled }}
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: hello-world-ext-authz
+  namespace: istio-ingress
+  annotations:
+    argocd.argoproj.io/sync-wave: "31"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: main-gateway
+  action: CUSTOM
+  provider:
+    name: request-interceptor-provider
+  rules:
+    - to:
+        - operation:
+            hosts:
+              - hello-world-app.{{ .Values.baseDns }}
+{{- end }}

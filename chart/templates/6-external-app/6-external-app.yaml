@@ -1,0 +1,49 @@
+---
+apiVersion: networking.istio.io/v1
+kind: ServiceEntry
+metadata:
+  name: httpbin-external
+  namespace: gateway-system
+spec:
+  hosts:
+    - httpbin.org
+  ports:
+    - number: 443
+      name: https
+      protocol: HTTPS
+  location: MESH_EXTERNAL
+  resolution: DNS
+---
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: httpbin-external
+  namespace: gateway-system
+spec:
+  host: httpbin.org
+  trafficPolicy:
+    tls:
+      mode: SIMPLE
+      sni: httpbin.org
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: httpbin-external
+  namespace: gateway-system
+spec:
+  parentRefs:
+    - name: main-gateway
+      namespace: istio-ingress
+  hostnames:
+    - external-app.{{ .Values.baseDns }}
+  rules:
+    - filters:
+        - type: URLRewrite
+          urlRewrite:
+            hostname: httpbin.org
+      backendRefs:
+        - group: networking.istio.io
+          kind: Hostname
+          name: httpbin.org
+          port: 443

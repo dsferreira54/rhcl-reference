@@ -6,6 +6,7 @@ metadata:
   namespace: example-apps
   annotations:
     argocd.argoproj.io/sync-wave: "26"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   hosts:
     - httpbin.org
@@ -23,6 +24,7 @@ metadata:
   namespace: example-apps
   annotations:
     argocd.argoproj.io/sync-wave: "26"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   host: httpbin.org
   trafficPolicy:

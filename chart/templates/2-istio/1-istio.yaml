@@ -59,7 +59,7 @@ spec:
           envoyExtAuthzHttp:
             service: request-interceptor-app.example-apps.svc.cluster.local
             port: 8080
-            pathPrefix: /
+            pathPrefix: ''
             timeout: 5s
             failOpen: false
             includeRequestHeadersInCheck:

@@ -61,6 +61,12 @@ spec:
     - path:
         type: PathPrefix
         value: /
+    filters:
+    - type: RequestMirror
+      requestMirror:
+        backendRef:
+          name: request-interceptor-app
+          port: 8080
     backendRefs:
     - name: hello-world-app
       port: 8080

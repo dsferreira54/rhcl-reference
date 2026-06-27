@@ -63,15 +63,7 @@ spec:
             timeout: 5s
             failOpen: false
             includeRequestHeadersInCheck:
-              - '*-*'
               - '***'
-              - authorization
-              - content-type
-              - x-request-id
-              - x-forwarded-for
-              - x-forwarded-host
-              - x-forwarded-proto
-              - user-agent
             includeRequestBodyInCheck:
               maxRequestBytes: 8192
               allowPartialMessage: true

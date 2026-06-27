@@ -5,7 +5,7 @@ metadata:
   name: cluster-monitoring-config
   namespace: openshift-monitoring
   annotations:
-    argocd.argoproj.io/sync-wave: "13"
+    argocd.argoproj.io/sync-wave: "17"
 data:
   config.yaml: |
     enableUserWorkload: true
@@ -16,7 +16,7 @@ metadata:
   name: rhcl-observability
   namespace: openshift-gitops
   annotations:
-    argocd.argoproj.io/sync-wave: "13"
+    argocd.argoproj.io/sync-wave: "17"
 spec:
   project: default
   source:

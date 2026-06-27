@@ -37,18 +37,63 @@ metadata:
   namespace: grafana
   annotations:
     argocd.argoproj.io/sync-wave: "20"
+    serviceaccounts.openshift.io/oauth-redirectreference.primary: '{"kind":"OAuthRedirectReference","apiVersion":"v1","reference":{"kind":"Route","name":"grafana-instance-route"}}'
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ocp-injected-certs
+  namespace: grafana
+  labels:
+    config.openshift.io/inject-trusted-cabundle: "true"
+  annotations:
+    argocd.argoproj.io/sync-wave: "20"
 ---
 apiVersion: v1
 kind: Secret
 metadata:
-  name: grafana-admin-credentials
+  name: grafana-proxy
   namespace: grafana
   annotations:
     argocd.argoproj.io/sync-wave: "20"
 type: Opaque
 stringData:
-  GF_SECURITY_ADMIN_USER: admin
-  GF_SECURITY_ADMIN_PASSWORD: admin123
+  session_secret: eYLm0QseKh92AKAWvveKOTGqRm2jOQHWCtqk2vQgcyU=
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: grafana-proxy
+  annotations:
+    argocd.argoproj.io/sync-wave: "20"
+rules:
+  - apiGroups:
+      - authentication.k8s.io
+    resources:
+      - tokenreviews
+    verbs:
+      - create
+  - apiGroups:
+      - authorization.k8s.io
+    resources:
+      - subjectaccessreviews
+    verbs:
+      - create
+---
+apiVersion: authorization.openshift.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: grafana-proxy
+  annotations:
+    argocd.argoproj.io/sync-wave: "20"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: grafana-proxy
+subjects:
+  - kind: ServiceAccount
+    name: grafana
+    namespace: grafana
 ---
 apiVersion: v1
 kind: Secret
@@ -86,40 +131,99 @@ metadata:
     argocd.argoproj.io/sync-wave: "21"
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
+  serviceAccount:
+    metadata:
+      name: grafana
+      annotations:
+        serviceaccounts.openshift.io/oauth-redirectreference.primary: '{"kind":"OAuthRedirectReference","apiVersion":"v1","reference":{"kind":"Route","name":"grafana-instance-route"}}'
+  client:
+    preferService: true
   config:
     log:
       mode: console
       level: warn
     auth:
-      disable_login_form: "false"
+      disable_login_form: "True"
+      disable_signout_menu: "True"
     auth.anonymous:
-      enabled: "false"
-    security:
-      admin_user: ${GF_SECURITY_ADMIN_USER}
-      admin_password: ${GF_SECURITY_ADMIN_PASSWORD}
+      enabled: "False"
+    auth.basic:
+      enabled: "False"
+    auth.proxy:
+      enabled: "True"
+      auto_sign_up: "True"
+      enable_login_token: "False"
+      header_name: "X-Forwarded-User"
+      header_property: username
+      headers: "Name:X-Forwarded-User Email:X-Forwarded-Email"
   deployment:
+    skipCreateAdminAccount: true
     spec:
       template:
         spec:
           serviceAccountName: grafana
+          volumes:
+            - name: grafana-tls
+              secret:
+                secretName: grafana-tls
+            - name: grafana-proxy
+              secret:
+                secretName: grafana-proxy
+            - name: ocp-injected-certs
+              configMap:
+                name: ocp-injected-certs
           containers:
-            - name: grafana
-              env:
-                - name: GF_SECURITY_ADMIN_USER
-                  valueFrom:
-                    secretKeyRef:
-                      name: grafana-admin-credentials
-                      key: GF_SECURITY_ADMIN_USER
-                - name: GF_SECURITY_ADMIN_PASSWORD
-                  valueFrom:
-                    secretKeyRef:
-                      name: grafana-admin-credentials
-                      key: GF_SECURITY_ADMIN_PASSWORD
+            - name: grafana-proxy
+              image: quay.io/openshift/origin-oauth-proxy
+              args:
+                - -provider=openshift
+                - -pass-basic-auth=false
+                - -https-address=:9091
+                - -http-address=
+                - -email-domain=*
+                - -upstream=http://localhost:3000
+                - -openshift-sar={"resource": "namespaces", "verb": "get"}
+                - -openshift-delegate-urls={"/": {"resource": "namespaces", "verb": "get"}}
+                - -tls-cert=/etc/tls/private/tls.crt
+                - -tls-key=/etc/tls/private/tls.key
+                - -client-secret-file=/var/run/secrets/kubernetes.io/serviceaccount/token
+                - -cookie-secret-file=/etc/proxy/secrets/session_secret
+                - -openshift-service-account=grafana
+                - -openshift-ca=/etc/pki/tls/cert.pem
+                - -openshift-ca=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+                - -openshift-ca=/etc/proxy/certs/ca-bundle.crt
+                - -skip-auth-regex=^/metrics
+              ports:
+                - containerPort: 9091
+                  name: https
+              volumeMounts:
+                - mountPath: /etc/tls/private
+                  name: grafana-tls
+                - mountPath: /etc/proxy/secrets
+                  name: grafana-proxy
+                - mountPath: /etc/proxy/certs
+                  name: ocp-injected-certs
+  service:
+    metadata:
+      annotations:
+        service.beta.openshift.io/serving-cert-secret-name: grafana-tls
+    spec:
+      ports:
+        - name: https
+          port: 9091
+          protocol: TCP
+          targetPort: https
   route:
     spec:
+      port:
+        targetPort: https
       tls:
-        termination: edge
-        insecureEdgeTerminationPolicy: Redirect
+        termination: reencrypt
+      to:
+        kind: Service
+        name: grafana-instance-service
+        weight: 100
+      wildcardPolicy: None
 ---
 apiVersion: grafana.integreatly.org/v1beta1
 kind: GrafanaDatasource

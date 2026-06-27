@@ -222,7 +222,7 @@ spec:
     matchLabels:
       dashboards: grafana
   datasources:
-    - inputName: DS_PROMETHEUS
+    - inputName: DS_KUADRANT-THANOS-HUB
       datasourceName: Prometheus
   grafanaCom:
     id: 22695

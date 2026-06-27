@@ -1,4 +1,4 @@
-3-gateway-api/gateway-api.yaml
-4-rhcl/
-5-hello-world-app/
-6-monitoring/
+templates/3-gateway-api/gateway-api.yaml
+templates/4-rhcl/
+templates/5-hello-world-app/
+templates/6-monitoring/

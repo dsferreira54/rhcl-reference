@@ -12,7 +12,7 @@ metadata:
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
-  name: main-istio-gateway
+  name: main-gateway
   namespace: istio-ingress
   annotations:
     argocd.argoproj.io/sync-wave: "10"

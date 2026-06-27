@@ -4,6 +4,8 @@ kind: ServiceEntry
 metadata:
   name: external-app
   namespace: gateway-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "26"
 spec:
   hosts:
     - httpbin.org
@@ -19,6 +21,8 @@ kind: DestinationRule
 metadata:
   name: external-app
   namespace: gateway-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "26"
 spec:
   host: httpbin.org
   trafficPolicy:
@@ -31,6 +35,8 @@ kind: HTTPRoute
 metadata:
   name: external-app
   namespace: gateway-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "27"
 spec:
   parentRefs:
     - name: main-gateway

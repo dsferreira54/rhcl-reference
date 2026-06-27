@@ -1,0 +1,7 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: example-apps
+  annotations:
+    argocd.argoproj.io/sync-wave: "22"

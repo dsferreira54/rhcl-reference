@@ -4,7 +4,7 @@
 # metadata:
 #   name: openshift-default
 #   annotations:
-#     argocd.argoproj.io/sync-wave: "9"
+#     argocd.argoproj.io/sync-wave: "11"
 # spec:
 #   controllerName: openshift.io/gateway-controller/v1
 # ---
@@ -14,7 +14,7 @@
 #   name: main-gateway
 #   namespace: openshift-ingress
 #   annotations:
-#     argocd.argoproj.io/sync-wave: "10"
+#     argocd.argoproj.io/sync-wave: "12"
 # spec:
 #   gatewayClassName: openshift-default
 #   listeners:

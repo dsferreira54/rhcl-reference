@@ -4,7 +4,7 @@ kind: Namespace
 metadata:
   name: kuadrant-system
   annotations:
-    argocd.argoproj.io/sync-wave: "11"
+    argocd.argoproj.io/sync-wave: "13"
 ---
 apiVersion: operators.coreos.com/v1
 kind: OperatorGroup
@@ -12,7 +12,7 @@ metadata:
   name: kuadrant
   namespace: kuadrant-system
   annotations:
-    argocd.argoproj.io/sync-wave: "11"
+    argocd.argoproj.io/sync-wave: "13"
 spec:
   upgradeStrategy: Default
 ---
@@ -22,7 +22,7 @@ metadata:
   name: rhcl-operator
   namespace: kuadrant-system
   annotations:
-    argocd.argoproj.io/sync-wave: "11"
+    argocd.argoproj.io/sync-wave: "13"
 spec:
   channel: stable
   installPlanApproval: Automatic
@@ -40,7 +40,7 @@ metadata:
   name: kuadrant
   namespace: kuadrant-system
   annotations:
-    argocd.argoproj.io/sync-wave: "12"
+    argocd.argoproj.io/sync-wave: "14"
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   observability:

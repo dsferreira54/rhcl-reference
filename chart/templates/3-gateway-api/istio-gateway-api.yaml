@@ -7,7 +7,7 @@ metadata:
     istio.io/rev: default
     openshift.io/cluster-monitoring: "true"
   annotations:
-    argocd.argoproj.io/sync-wave: "9"
+    argocd.argoproj.io/sync-wave: "11"
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
@@ -15,7 +15,7 @@ metadata:
   name: main-gateway
   namespace: istio-ingress
   annotations:
-    argocd.argoproj.io/sync-wave: "10"
+    argocd.argoproj.io/sync-wave: "12"
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   gatewayClassName: istio

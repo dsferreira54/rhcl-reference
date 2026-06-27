@@ -60,7 +60,7 @@ metadata:
 spec:
   parentRefs:
   - name: main-gateway
-    namespace: openshift-ingress
+    namespace: istio-ingress
   hostnames:
   - hello-world-app.{{ .Values.baseDns }}
   rules:

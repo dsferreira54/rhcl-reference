@@ -63,7 +63,7 @@ spec:
             timeout: 5s
             failOpen: false
             includeRequestHeadersInCheck:
-              - *
+              - '*
             includeRequestBodyInCheck:
               maxRequestBytes: 8192
               allowPartialMessage: true

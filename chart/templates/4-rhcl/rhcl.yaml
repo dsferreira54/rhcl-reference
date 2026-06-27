@@ -29,6 +29,10 @@ spec:
   name: rhcl-operator
   source: redhat-operators
   sourceNamespace: openshift-marketplace
+  config:
+    env:
+    - name: ISTIO_GATEWAY_CONTROLLER_NAMES
+      value: istio.io/gateway-controller
 ---
 apiVersion: kuadrant.io/v1beta1
 kind: Kuadrant

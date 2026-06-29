@@ -116,6 +116,7 @@ metadata:
 spec:
   client:
     preferIngress: false
+    preferService: true
   config:
     log:
       mode: console
@@ -126,7 +127,7 @@ spec:
     auth.anonymous:
       enabled: "true"
     auth.basic:
-      enabled: "false"
+      enabled: "true"
     auth.proxy:
       enabled: "true"
       enable_login_token: "true"

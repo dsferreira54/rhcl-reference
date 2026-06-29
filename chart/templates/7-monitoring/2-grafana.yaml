@@ -103,6 +103,34 @@ roleRef:
   name: cluster-monitoring-view
   apiGroup: rbac.authorization.k8s.io
 ---
+# Login permission granted only to members of the OpenShift group grafana-access.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: grafana-access-login
+  annotations:
+    argocd.argoproj.io/sync-wave: "18"
+rules:
+  - nonResourceURLs:
+      - /grafana-access
+    verbs:
+      - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: grafana-access-login
+  annotations:
+    argocd.argoproj.io/sync-wave: "18"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: grafana-access-login
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: grafana-access
+---
 apiVersion: grafana.integreatly.org/v1beta1
 kind: Grafana
 metadata:
@@ -124,17 +152,19 @@ spec:
       disable_login_form: "true"
       disable_signout_menu: "true"
     auth.anonymous:
-      enabled: "true"
+      enabled: "false"
     auth.basic:
       enabled: "true"
     auth.proxy:
       enabled: "true"
       enable_login_token: "true"
+      auto_sign_up: "true"
       header_name: X-Forwarded-User
       header_property: username
-    security:
-      admin_user: root
-      admin_password: secret
+    users:
+      allow_sign_up: "true"
+      auto_assign_org: "true"
+      auto_assign_org_role: Viewer
   serviceAccount:
     metadata:
       annotations:
@@ -176,8 +206,8 @@ spec:
                 - -http-address=
                 - -email-domain=*
                 - -upstream=http://localhost:3000
-                - '-openshift-sar={"resource": "namespaces", "verb": "get"}'
-                - '-openshift-delegate-urls={"/": {"resource": "namespaces", "verb": "get"}}'
+                - '-openshift-sar={"nonResourceURL": "/grafana-access", "verb": "get"}'
+                - '-openshift-delegate-urls={"/": {"nonResourceURL": "/grafana-access", "verb": "get"}}'
                 - -tls-cert=/etc/tls/private/tls.crt
                 - -tls-key=/etc/tls/private/tls.key
                 - -client-secret-file=/var/run/secrets/kubernetes.io/serviceaccount/token

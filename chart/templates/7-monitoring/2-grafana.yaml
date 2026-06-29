@@ -30,7 +30,6 @@ spec:
   source: community-operators
   sourceNamespace: openshift-marketplace
 ---
-# Trusted CA bundle injected by OpenShift for oauth-proxy → OAuth server TLS.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -41,7 +40,6 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "18"
 ---
-# Session cookie secret for openshift/oauth-proxy.
 apiVersion: v1
 kind: Secret
 metadata:
@@ -208,7 +206,6 @@ spec:
         weight: 100
       wildcardPolicy: None
 ---
-# Created after the Grafana CR so the operator-managed SA exists first.
 apiVersion: v1
 kind: Secret
 metadata:

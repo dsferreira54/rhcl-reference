@@ -103,33 +103,33 @@ roleRef:
   name: cluster-monitoring-view
   apiGroup: rbac.authorization.k8s.io
 ---
-# Login permission granted only to members of the OpenShift group grafana-access.
+# Login permission granted only to members of the OpenShift group grafana-admins.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: grafana-access-login
+  name: grafana-admins-login
   annotations:
     argocd.argoproj.io/sync-wave: "18"
 rules:
   - nonResourceURLs:
-      - /grafana-access
+      - /grafana-admins
     verbs:
       - get
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: grafana-access-login
+  name: grafana-admins-login
   annotations:
     argocd.argoproj.io/sync-wave: "18"
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: grafana-access-login
+  name: grafana-admins-login
 subjects:
   - apiGroup: rbac.authorization.k8s.io
     kind: Group
-    name: grafana-access
+    name: grafana-admins
 ---
 apiVersion: grafana.integreatly.org/v1beta1
 kind: Grafana
@@ -164,7 +164,7 @@ spec:
     users:
       allow_sign_up: "true"
       auto_assign_org: "true"
-      auto_assign_org_role: Viewer
+      auto_assign_org_role: Admin
   serviceAccount:
     metadata:
       annotations:
@@ -206,8 +206,8 @@ spec:
                 - -http-address=
                 - -email-domain=*
                 - -upstream=http://localhost:3000
-                - '-openshift-sar={"nonResourceURL": "/grafana-access", "verb": "get"}'
-                - '-openshift-delegate-urls={"/": {"nonResourceURL": "/grafana-access", "verb": "get"}}'
+                - '-openshift-sar={"nonResourceURL": "/grafana-admins", "verb": "get"}'
+                - '-openshift-delegate-urls={"/": {"nonResourceURL": "/grafana-admins", "verb": "get"}}'
                 - -tls-cert=/etc/tls/private/tls.crt
                 - -tls-key=/etc/tls/private/tls.key
                 - -client-secret-file=/var/run/secrets/kubernetes.io/serviceaccount/token

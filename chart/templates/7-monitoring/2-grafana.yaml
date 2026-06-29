@@ -103,34 +103,6 @@ roleRef:
   name: cluster-monitoring-view
   apiGroup: rbac.authorization.k8s.io
 ---
-# Login permission granted only to members of the OpenShift group grafana-admins.
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: grafana-admins-login
-  annotations:
-    argocd.argoproj.io/sync-wave: "18"
-rules:
-  - nonResourceURLs:
-      - /grafana-admins
-    verbs:
-      - get
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: grafana-admins-login
-  annotations:
-    argocd.argoproj.io/sync-wave: "18"
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: grafana-admins-login
-subjects:
-  - apiGroup: rbac.authorization.k8s.io
-    kind: Group
-    name: grafana-admins
----
 apiVersion: grafana.integreatly.org/v1beta1
 kind: Grafana
 metadata:
@@ -206,8 +178,8 @@ spec:
                 - -http-address=
                 - -email-domain=*
                 - -upstream=http://localhost:3000
-                - '-openshift-sar={"nonResourceURL": "/grafana-admins", "verb": "get"}'
-                - '-openshift-delegate-urls={"/": {"nonResourceURL": "/grafana-admins", "verb": "get"}}'
+                - '-openshift-sar={"resource": "namespaces", "verb": "get"}'
+                - '-openshift-delegate-urls={"/": {"resource": "namespaces", "verb": "get"}}'
                 - -tls-cert=/etc/tls/private/tls.crt
                 - -tls-key=/etc/tls/private/tls.key
                 - -client-secret-file=/var/run/secrets/kubernetes.io/serviceaccount/token

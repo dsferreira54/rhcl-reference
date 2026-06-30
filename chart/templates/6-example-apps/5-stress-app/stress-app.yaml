@@ -116,24 +116,20 @@ data:
                         }
                     )
 
-            routes.append(
-                {
-                    "id": f"{ns}/{name}",
-                    "namespace": ns,
-                    "name": name,
-                    "hostnames": hostnames,
-                    "paths": sorted(set(all_paths)),
-                    "gateway": f"{gw_ns}/{gw_name}",
-                    "targets": targets,
-                }
-            )
+                routes.append(
+                    {
+                        "id": f"{ns}/{name}",
+                        "namespace": ns,
+                        "name": name,
+                        "hostnames": hostnames,
+                        "paths": sorted(set(all_paths)),
+                        "gateway": f"{gw_ns}/{gw_name}",
+                        "gateway_url": gw_url,
+                        "targets": targets,
+                    }
+                )
             routes.sort(key=lambda r: (r["namespace"], r["name"]))
-            default_gw = ""
-            for route in routes:
-                if route.get("targets"):
-                    default_gw = route["targets"][0]["gateway_url"]
-                    break
-            return routes, default_gw
+            return routes
 
 
         def normalize_targets(targets):
@@ -326,14 +322,10 @@ data:
                 return
                 if path == "/api/routes":
                     try:
-                        routes, default_gw = discover_routes()
-                        self._json_response(
-                            200, {"routes": routes, "default_gateway_url": default_gw}
-                        )
+                        routes = discover_routes()
+                        self._json_response(200, {"routes": routes})
                     except Exception as exc:
-                        self._json_response(
-                            500, {"error": str(exc), "routes": [], "default_gateway_url": ""}
-                        )
+                        self._json_response(500, {"error": str(exc), "routes": []})
                     return
             if path == "/api/test/status":
                 global current_test
@@ -534,12 +526,12 @@ data:
         color:#9ec1ff; background:rgba(91,140,255,.12); border:1px solid rgba(91,140,255,.18);
         padding:.12rem .4rem; border-radius:6px;
       }
-      .custom-list { display:grid; gap:.55rem; }
-      .custom-row {
-        display:grid; grid-template-columns:1.2fr .7fr 1.2fr auto; gap:.55rem; align-items:end;
-        padding:.7rem; border:1px solid var(--border); border-radius:12px; background:rgba(8,11,18,.45);
+      .custom-paths-wrap { margin-top:.55rem; padding-top:.55rem; border-top:1px dashed var(--border); }
+      .custom-paths-list { display:grid; gap:.4rem; margin-top:.4rem; }
+      .custom-path-row {
+        display:grid; grid-template-columns:1fr auto; gap:.45rem; align-items:end;
+        padding:.45rem .55rem; border:1px solid var(--border); border-radius:10px; background:rgba(8,11,18,.35);
       }
-      @media (max-width:900px) { .custom-row { grid-template-columns:1fr; } }
       label { display:block; font-size:.74rem; font-weight:600; color:var(--muted); margin:0 0 .3rem; }
       input, select, textarea {
         width:100%; padding:.58rem .72rem; border-radius:10px; border:1px solid var(--border);
@@ -615,7 +607,7 @@ data:
             <div class="card-head">
               <div>
                 <h2>Test targets</h2>
-                <p>Select discovered endpoints and/or add custom targets. Traffic is distributed randomly across the selection.</p>
+                <p>Select endpoints from HTTPRoutes. Optionally add custom paths per route.</p>
               </div>
             </div>
 
@@ -626,14 +618,6 @@ data:
               <button class="btn-ghost" id="clearBtn" type="button">Clear</button>
             </div>
             <div class="routes" id="routesList"><div class="empty">Loading routes...</div></div>
-
-            <div class="section-label">Custom endpoints</div>
-            <label for="defaultGateway">Default gateway URL</label>
-            <input id="defaultGateway" placeholder="http://main-gateway-istio.istio-ingress.svc.cluster.local:80">
-            <div class="custom-list" id="customEndpoints" style="margin-top:.65rem"></div>
-            <div class="toolbar" style="margin-top:.55rem;margin-bottom:0">
-              <button class="btn-ghost" id="addEndpointBtn" type="button">+ Add endpoint</button>
-            </div>
           </section>
 
           <section class="card metrics-wrap">
@@ -688,7 +672,6 @@ data:
     </div>
     <script>
     let routes = [];
-    let defaultGateway = '';
     let pollTimer = null;
 
     function el(id) { return document.getElementById(id); }
@@ -728,17 +711,23 @@ data:
       });
     }
 
-    function addCustomRow(hostname, path, gateway) {
+    function routeHostnames(route) {
+      const hosts = route.hostnames || [];
+      if (hosts.length) return hosts.filter(function(h) { return h && h !== '*'; });
+      const fromTargets = (route.targets || []).map(function(t) { return t.hostname; });
+      return fromTargets.filter(function(h, i, a) { return h && h !== '*' && a.indexOf(h) === i; });
+    }
+
+    function addCustomPathRow(routeGroup, path) {
+      const list = routeGroup.querySelector('.custom-paths-list');
       const row = document.createElement('div');
-      row.className = 'custom-row';
+      row.className = 'custom-path-row';
       row.innerHTML =
-        '<div><label>Hostname</label><input class="ce-hostname" value="' + esc(hostname || '') + '"></div>' +
-        '<div><label>Path</label><input class="ce-path" value="' + esc(path || '/') + '"></div>' +
-        '<div><label>Gateway URL</label><input class="ce-gateway" value="' + esc(gateway || el('defaultGateway').value || defaultGateway) + '"></div>' +
+        '<div><label>Custom path</label><input class="ce-path" value="' + esc(path || '/') + '" placeholder="/api/health"></div>' +
         '<button type="button" class="btn-danger remove-row">Remove</button>';
       row.querySelector('.remove-row').onclick = function() { row.remove(); updateTargetCount(); };
-      row.querySelectorAll('input').forEach(function(inp) { inp.addEventListener('input', updateTargetCount); });
-      el('customEndpoints').appendChild(row);
+      row.querySelector('.ce-path').addEventListener('input', updateTargetCount);
+      list.appendChild(row);
       updateTargetCount();
     }
 
@@ -748,10 +737,6 @@ data:
         const res = await fetch('/api/routes');
         const data = await res.json();
         routes = data.routes || [];
-        if (data.default_gateway_url) {
-          defaultGateway = data.default_gateway_url;
-          if (!el('defaultGateway').value) el('defaultGateway').value = defaultGateway;
-        }
         renderRoutes();
         updateTargetCount();
       } catch (e) {
@@ -768,6 +753,9 @@ data:
         const parts = (r.id || '').split('/');
         const ns = parts[0] || r.namespace;
         const name = parts[1] || r.name;
+        const gwUrl = r.gateway_url || ((r.targets && r.targets[0]) ? r.targets[0].gateway_url : '');
+        const hosts = routeHostnames(r);
+        const hostsLabel = hosts.length ? hosts.join(', ') : '(no hostname)';
         const endpointRows = (r.targets || []).map(function(t) {
           return '<label class="endpoint-tile">' +
             '<input type="checkbox" class="endpoint-cb" data-hostname="' + esc(t.hostname) + '" data-path="' + esc(t.path) + '" data-gateway="' + esc(t.gateway_url) + '" value="' + esc(t.id) + '">' +
@@ -775,13 +763,17 @@ data:
             '<span class="endpoint-info"><span class="endpoint-host">' + esc(t.hostname) + '</span><br><span class="endpoint-path">' + esc(t.path) + '</span></span>' +
             '</label>';
         }).join('');
-        return '<div class="route-group" data-route-id="' + esc(r.id) + '">' +
+        return '<div class="route-group" data-route-id="' + esc(r.id) + '" data-gateway-url="' + esc(gwUrl) + '" data-hostnames="' + esc(JSON.stringify(hosts)) + '">' +
           '<div class="route-top">' +
             '<div class="route-title"><span class="ns-badge">' + esc(ns) + '</span><span class="route-name">' + esc(name) + '</span></div>' +
             '<button type="button" class="btn-text route-select-all">Select all</button>' +
           '</div>' +
-          '<div class="route-meta">Gateway: ' + esc(r.gateway) + '</div>' +
+          '<div class="route-meta">Hostnames: ' + esc(hostsLabel) + '</div>' +
           '<div class="endpoint-grid">' + endpointRows + '</div>' +
+          '<div class="custom-paths-wrap">' +
+            '<button type="button" class="btn-text add-custom-path">+ Add custom path</button>' +
+            '<div class="custom-paths-list"></div>' +
+          '</div>' +
           '</div>';
       }).join('');
 
@@ -794,6 +786,11 @@ data:
           updateTargetCount();
         };
       });
+      document.querySelectorAll('.add-custom-path').forEach(function(btn) {
+        btn.onclick = function() {
+          addCustomPathRow(btn.closest('.route-group'), '/');
+        };
+      });
     }
 
     function selectedTargets() {
@@ -801,12 +798,18 @@ data:
       document.querySelectorAll('.endpoint-cb:checked').forEach(function(cb) {
         targets.push({ hostname: cb.dataset.hostname, path: cb.dataset.path, gateway_url: cb.dataset.gateway });
       });
-      const gwDefault = el('defaultGateway').value.trim() || defaultGateway;
-      document.querySelectorAll('.custom-row').forEach(function(row) {
-        const hostname = row.querySelector('.ce-hostname').value.trim();
-        const path = row.querySelector('.ce-path').value.trim() || '/';
-        const gateway_url = row.querySelector('.ce-gateway').value.trim() || gwDefault;
-        if (hostname && gateway_url) targets.push({ hostname: hostname, path: path, gateway_url: gateway_url });
+      document.querySelectorAll('.route-group').forEach(function(group) {
+        const gateway = group.dataset.gatewayUrl;
+        let hostnames = [];
+        try { hostnames = JSON.parse(group.dataset.hostnames || '[]'); } catch (e) { hostnames = []; }
+        if (!gateway || !hostnames.length) return;
+        group.querySelectorAll('.custom-path-row').forEach(function(row) {
+          const rawPath = row.querySelector('.ce-path').value.trim() || '/';
+          const path = rawPath.startsWith('/') ? rawPath : '/' + rawPath;
+          hostnames.forEach(function(hostname) {
+            targets.push({ hostname: hostname, path: path, gateway_url: gateway });
+          });
+        });
       });
       return targets;
     }
@@ -949,12 +952,9 @@ data:
       bindEndpointTiles();
       updateTargetCount();
     };
-    el('addEndpointBtn').onclick = function() { addCustomRow('', '/', ''); };
-    el('defaultGateway').addEventListener('input', updateTargetCount);
     el('startBtn').onclick = startTest;
     el('stopBtn').onclick = stopTest;
     fetchRoutes();
-    addCustomRow('', '/', '');
     renderMetrics({ total_requests:0, requests_per_sec:0, latency_avg_ms:0, latency_min_ms:0, latency_max_ms:0, error_rate:0, elapsed_sec:0, status_codes:{}, throughput_history:[], latency_history:[] });
     </script>
     </body>

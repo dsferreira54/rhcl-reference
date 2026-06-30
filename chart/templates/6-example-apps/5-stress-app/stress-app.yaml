@@ -127,8 +127,28 @@ data:
                     "targets": targets,
                 }
             )
-        routes.sort(key=lambda r: (r["namespace"], r["name"]))
-        return routes
+            routes.sort(key=lambda r: (r["namespace"], r["name"]))
+            default_gw = ""
+            for route in routes:
+                if route.get("targets"):
+                    default_gw = route["targets"][0]["gateway_url"]
+                    break
+            return routes, default_gw
+
+
+        def normalize_targets(targets):
+            normalized = []
+            for t in targets or []:
+                hostname = (t.get("hostname") or "").strip()
+                path = (t.get("path") or "/").strip() or "/"
+                if not path.startswith("/"):
+                    path = "/" + path
+                gateway_url = (t.get("gateway_url") or "").strip()
+                if hostname and gateway_url:
+                    normalized.append(
+                        {"hostname": hostname, "path": path, "gateway_url": gateway_url}
+                    )
+            return normalized
 
 
     class LoadTest:
@@ -304,13 +324,17 @@ data:
             if path == "/health":
                 self._json_response(200, {"status": "ok"})
                 return
-            if path == "/api/routes":
-                try:
-                    routes = discover_routes()
-                    self._json_response(200, {"routes": routes})
-                except Exception as exc:
-                    self._json_response(500, {"error": str(exc), "routes": []})
-                return
+                if path == "/api/routes":
+                    try:
+                        routes, default_gw = discover_routes()
+                        self._json_response(
+                            200, {"routes": routes, "default_gateway_url": default_gw}
+                        )
+                    except Exception as exc:
+                        self._json_response(
+                            500, {"error": str(exc), "routes": [], "default_gateway_url": ""}
+                        )
+                    return
             if path == "/api/test/status":
                 global current_test
                 with test_lock:
@@ -347,9 +371,11 @@ data:
                 except json.JSONDecodeError:
                     self._json_response(400, {"error": "invalid JSON"})
                     return
-                if not config.get("targets"):
+                targets = normalize_targets(config.get("targets"))
+                if not targets:
                     self._json_response(400, {"error": "no targets selected"})
                     return
+                config["targets"] = targets
                 with test_lock:
                     if current_test and current_test.running:
                         self._json_response(409, {"error": "test already running"})
@@ -389,20 +415,30 @@ data:
       @media (max-width:1100px) { main { grid-template-columns:1fr; } }
       section { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:1rem; }
       h2 { margin:0 0 .75rem; font-size:1rem; }
+      h3 { margin:1rem 0 .5rem; font-size:.9rem; color:var(--muted); font-weight:600; }
       label { display:block; font-size:.85rem; color:var(--muted); margin:.5rem 0 .25rem; }
       input, select, textarea { width:100%; padding:.45rem .6rem; border-radius:6px; border:1px solid var(--border);
         background:#0b1017; color:var(--text); }
       textarea { min-height:4rem; font-family:monospace; font-size:.8rem; }
-      .routes { max-height:220px; overflow:auto; border:1px solid var(--border); border-radius:6px; padding:.5rem; }
-      .route-item { padding:.35rem 0; border-bottom:1px solid var(--border); font-size:.85rem; }
-      .route-item:last-child { border-bottom:none; }
-      .route-meta { color:var(--muted); font-size:.75rem; }
+      .routes { max-height:260px; overflow:auto; border:1px solid var(--border); border-radius:6px; padding:.5rem; }
+      .route-group { padding:.5rem 0; border-bottom:1px solid var(--border); }
+      .route-group:last-child { border-bottom:none; }
+      .route-header { display:flex; align-items:center; gap:.5rem; font-size:.85rem; }
+      .route-meta { color:var(--muted); font-size:.75rem; margin:.25rem 0 .35rem; }
+      .endpoint-item { font-size:.82rem; padding:.2rem 0 .2rem 1rem; }
+      .endpoint-item code { color:var(--accent); font-size:.78rem; }
+      .custom-row { display:grid; grid-template-columns:1fr 120px 1fr auto; gap:.5rem; align-items:end;
+        margin-bottom:.5rem; padding:.5rem; background:#0b1017; border:1px solid var(--border); border-radius:6px; }
+      @media (max-width:900px) { .custom-row { grid-template-columns:1fr; } }
+      .custom-row label { margin-top:0; }
+      .custom-row .remove-row { padding:.45rem .65rem; margin-bottom:0; white-space:nowrap; }
       .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:.75rem; }
       .btns { display:flex; gap:.5rem; margin-top:1rem; flex-wrap:wrap; }
       button { padding:.5rem 1rem; border:none; border-radius:6px; cursor:pointer; font-weight:600; }
       .primary { background:var(--accent); color:#fff; }
       .danger { background:var(--err); color:#fff; }
       .secondary { background:var(--border); color:var(--text); }
+      .link-btn { background:none; border:none; color:var(--accent); padding:0; font-size:.75rem; cursor:pointer; font-weight:600; }
       button:disabled { opacity:.5; cursor:not-allowed; }
       .metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:.5rem; }
       .metric { background:#0b1017; border:1px solid var(--border); border-radius:6px; padding:.6rem; }
@@ -410,22 +446,38 @@ data:
       .metric strong { font-size:1.1rem; }
       canvas { width:100%; height:160px; background:#0b1017; border:1px solid var(--border); border-radius:6px; }
       .status-warn { color:var(--warn); }
-      #statusMsg { font-size:.85rem; color:var(--muted); margin-top:.5rem; }
+      #statusMsg, #targetCount { font-size:.85rem; color:var(--muted); margin-top:.5rem; }
+      #targetCount { margin-top:.35rem; }
       .full { grid-column:1 / -1; }
+      .hint { font-size:.8rem; color:var(--muted); margin:0 0 .75rem; }
     </style>
     </head>
     <body>
     <header><h1>stress-app &mdash; HTTPRoute load tester</h1></header>
     <main>
-      <section>
-        <h2>Discovered HTTPRoutes</h2>
+      <section class="full">
+        <h2>Test targets</h2>
+        <p class="hint">Select individual endpoints from discovered HTTPRoutes and/or add custom endpoints. The load test rotates randomly across all selected targets.</p>
+        <div id="targetCount">0 endpoints selected</div>
+
+        <h3>Discovered HTTPRoutes</h3>
         <div class="btns" style="margin-top:0">
           <button class="secondary" id="refreshBtn" type="button">Refresh</button>
-          <button class="secondary" id="selectAllBtn" type="button">Select all</button>
-          <button class="secondary" id="clearBtn" type="button">Clear</button>
+          <button class="secondary" id="selectAllBtn" type="button">Select all endpoints</button>
+          <button class="secondary" id="clearBtn" type="button">Clear selection</button>
         </div>
         <div class="routes" id="routesList"><em>Loading...</em></div>
+
+        <h3>Custom endpoints</h3>
+        <p class="hint">Add any hostname/path combination. Gateway URL defaults to the discovered gateway below.</p>
+        <label>Default gateway URL</label>
+        <input id="defaultGateway" placeholder="http://main-gateway-istio.istio-ingress.svc.cluster.local:80">
+        <div id="customEndpoints"></div>
+        <div class="btns" style="margin-top:.5rem">
+          <button class="secondary" id="addEndpointBtn" type="button">Add endpoint</button>
+        </div>
       </section>
+
       <section>
         <h2>Load configuration</h2>
         <div class="grid2">
@@ -446,6 +498,7 @@ data:
         </div>
         <div id="statusMsg"></div>
       </section>
+
       <section class="full">
         <h2>Metrics</h2>
         <div class="metrics" id="metrics"></div>
@@ -457,9 +510,33 @@ data:
     </main>
     <script>
     let routes = [];
+    let defaultGateway = '';
     let pollTimer = null;
 
     function el(id) { return document.getElementById(id); }
+
+    function esc(s) {
+      return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+    }
+
+    function updateTargetCount() {
+      const n = selectedTargets().length;
+      el('targetCount').textContent = n + ' endpoint' + (n === 1 ? '' : 's') + ' selected';
+    }
+
+    function addCustomRow(hostname, path, gateway) {
+      const row = document.createElement('div');
+      row.className = 'custom-row';
+      row.innerHTML =
+        '<div><label>Hostname (Host header)</label><input class="ce-hostname" value="' + esc(hostname || '') + '"></div>' +
+        '<div><label>Path</label><input class="ce-path" value="' + esc(path || '/') + '"></div>' +
+        '<div><label>Gateway URL</label><input class="ce-gateway" value="' + esc(gateway || el('defaultGateway').value || defaultGateway) + '"></div>' +
+        '<button type="button" class="danger remove-row">Remove</button>';
+      row.querySelector('.remove-row').onclick = function() { row.remove(); updateTargetCount(); };
+      row.querySelectorAll('input').forEach(function(inp) { inp.addEventListener('input', updateTargetCount); });
+      el('customEndpoints').appendChild(row);
+      updateTargetCount();
+    }
 
     async function fetchRoutes() {
       el('routesList').innerHTML = '<em>Loading...</em>';
@@ -467,7 +544,12 @@ data:
         const res = await fetch('/api/routes');
         const data = await res.json();
         routes = data.routes || [];
+        if (data.default_gateway_url) {
+          defaultGateway = data.default_gateway_url;
+          if (!el('defaultGateway').value) el('defaultGateway').value = defaultGateway;
+        }
         renderRoutes();
+        updateTargetCount();
       } catch (e) {
         el('routesList').innerHTML = '<span class="status-warn">Failed to load routes: ' + e + '</span>';
       }
@@ -478,20 +560,49 @@ data:
         el('routesList').innerHTML = '<em>No HTTPRoutes found.</em>';
         return;
       }
-      el('routesList').innerHTML = routes.map(r => {
-        const hosts = (r.hostnames || []).join(', ') || '(no hostname)';
-        const paths = (r.paths || []).join(', ');
-        return '<div class="route-item"><label><input type="checkbox" class="route-cb" value="' + r.id + '"> ' +
-          '<strong>' + r.namespace + '/' + r.name + '</strong></label>' +
-          '<div class="route-meta">hosts: ' + hosts + ' | paths: ' + paths + ' | gateway: ' + r.gateway + '</div></div>';
+      el('routesList').innerHTML = routes.map(function(r) {
+        const endpointRows = (r.targets || []).map(function(t) {
+          return '<div class="endpoint-item"><label><input type="checkbox" class="endpoint-cb" ' +
+            'data-hostname="' + esc(t.hostname) + '" data-path="' + esc(t.path) + '" ' +
+            'data-gateway="' + esc(t.gateway_url) + '" value="' + esc(t.id) + '"> ' +
+            esc(t.hostname) + ' <code>' + esc(t.path) + '</code></label></div>';
+        }).join('');
+        return '<div class="route-group" data-route-id="' + esc(r.id) + '">' +
+          '<div class="route-header"><strong>' + esc(r.namespace) + '/' + esc(r.name) + '</strong>' +
+          '<button type="button" class="link-btn route-select-all">select all</button></div>' +
+          '<div class="route-meta">gateway: ' + esc(r.gateway) + '</div>' +
+          endpointRows + '</div>';
       }).join('');
+
+      document.querySelectorAll('.endpoint-cb').forEach(function(cb) {
+        cb.addEventListener('change', updateTargetCount);
+      });
+      document.querySelectorAll('.route-select-all').forEach(function(btn) {
+        btn.onclick = function() {
+          const group = btn.closest('.route-group');
+          group.querySelectorAll('.endpoint-cb').forEach(function(cb) { cb.checked = true; });
+          updateTargetCount();
+        };
+      });
     }
 
     function selectedTargets() {
-      const ids = new Set([...document.querySelectorAll('.route-cb:checked')].map(c => c.value));
       const targets = [];
-      routes.forEach(r => {
-        if (ids.has(r.id)) targets.push(...(r.targets || []));
+      document.querySelectorAll('.endpoint-cb:checked').forEach(function(cb) {
+        targets.push({
+          hostname: cb.dataset.hostname,
+          path: cb.dataset.path,
+          gateway_url: cb.dataset.gateway
+        });
+      });
+      const gwDefault = el('defaultGateway').value.trim() || defaultGateway;
+      document.querySelectorAll('.custom-row').forEach(function(row) {
+        const hostname = row.querySelector('.ce-hostname').value.trim();
+        const path = row.querySelector('.ce-path').value.trim() || '/';
+        const gateway_url = row.querySelector('.ce-gateway').value.trim() || gwDefault;
+        if (hostname && gateway_url) {
+          targets.push({ hostname: hostname, path: path, gateway_url: gateway_url });
+        }
       });
       return targets;
     }
@@ -503,25 +614,25 @@ data:
 
     async function startTest() {
       const targets = selectedTargets();
-      if (!targets.length) { el('statusMsg').textContent = 'Select at least one HTTPRoute.'; return; }
+      if (!targets.length) { el('statusMsg').textContent = 'Select or add at least one endpoint.'; return; }
       let headers = {};
       try { headers = parseJsonField(el('headers').value, {}); }
       catch (e) { el('statusMsg').textContent = 'Invalid headers JSON.'; return; }
       const payload = {
-        targets,
+        targets: targets,
         concurrent_users: +el('users').value,
         duration_sec: +el('duration').value,
         ramp_up_sec: +el('rampUp').value,
         interval_ms: +el('interval').value,
         method: el('method').value,
         body: el('body').value,
-        headers
+        headers: headers
       };
-      el('statusMsg').textContent = 'Starting...';
+      el('statusMsg').textContent = 'Starting test against ' + targets.length + ' endpoint(s)...';
       const res = await fetch('/api/test/start', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
       const data = await res.json();
       if (!res.ok) { el('statusMsg').textContent = data.error || 'Start failed'; return; }
-      el('statusMsg').textContent = 'Test running...';
+      el('statusMsg').textContent = 'Test running against ' + targets.length + ' endpoint(s)...';
       el('startBtn').disabled = true;
       el('stopBtn').disabled = false;
       if (!pollTimer) pollTimer = setInterval(pollStatus, 1000);
@@ -543,7 +654,9 @@ data:
         ['Elapsed (s)', m.elapsed_sec],
         ['Status codes', JSON.stringify(m.status_codes || {})]
       ];
-      el('metrics').innerHTML = items.map(([k,v]) => '<div class="metric"><span>' + k + '</span><strong>' + v + '</strong></div>').join('');
+      el('metrics').innerHTML = items.map(function(pair) {
+        return '<div class="metric"><span>' + pair[0] + '</span><strong>' + pair[1] + '</strong></div>';
+      }).join('');
       drawChart('throughputChart', m.throughput_history || [], 'rps', '#3d8bfd');
       drawChart('latencyChart', m.latency_history || [], 'avg_ms', '#3dd68c');
     }
@@ -556,11 +669,11 @@ data:
       ctx.strokeStyle = '#2d3a4d';
       ctx.beginPath(); ctx.moveTo(40,10); ctx.lineTo(40,h-20); ctx.lineTo(w-10,h-20); ctx.stroke();
       if (!data.length) return;
-      const vals = data.map(d => d[key]);
-      const maxV = Math.max(...vals, 1);
+      const vals = data.map(function(d) { return d[key]; });
+      const maxV = Math.max.apply(null, vals.concat([1]));
       const xs = data.length > 1 ? (w - 50) / (data.length - 1) : 0;
       ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.beginPath();
-      data.forEach((d, i) => {
+      data.forEach(function(d, i) {
         const x = 40 + i * xs;
         const y = h - 20 - (d[key] / maxV) * (h - 40);
         if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
@@ -581,11 +694,20 @@ data:
     }
 
     el('refreshBtn').onclick = fetchRoutes;
-    el('selectAllBtn').onclick = () => document.querySelectorAll('.route-cb').forEach(c => c.checked = true);
-    el('clearBtn').onclick = () => document.querySelectorAll('.route-cb').forEach(c => c.checked = false);
+    el('selectAllBtn').onclick = function() {
+      document.querySelectorAll('.endpoint-cb').forEach(function(c) { c.checked = true; });
+      updateTargetCount();
+    };
+    el('clearBtn').onclick = function() {
+      document.querySelectorAll('.endpoint-cb').forEach(function(c) { c.checked = false; });
+      updateTargetCount();
+    };
+    el('addEndpointBtn').onclick = function() { addCustomRow('', '/', ''); };
+    el('defaultGateway').addEventListener('input', updateTargetCount);
     el('startBtn').onclick = startTest;
     el('stopBtn').onclick = stopTest;
     fetchRoutes();
+    addCustomRow('', '/', '');
     </script>
     </body>
     </html>

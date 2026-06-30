@@ -1,0 +1,733 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: stress-app
+  namespace: example-apps
+  annotations:
+    argocd.argoproj.io/sync-wave: "35"
+data:
+  app.py: |
+    #!/usr/bin/env python3
+    """stress-app: HTTP load tester with Kubernetes HTTPRoute discovery."""
+    import json
+    import random
+    import ssl
+    import threading
+    import time
+    import urllib.error
+    import urllib.request
+    from collections import defaultdict
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from pathlib import Path
+    from urllib.parse import urlparse
+
+    PORT = 8080
+    TOKEN_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+    CA_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+    API = "https://kubernetes.default.svc"
+    HTML_PATH = Path("/app/index.html")
+    GATEWAY_CACHE = {}
+    GATEWAY_CACHE_LOCK = threading.Lock()
+
+    current_test = None
+    test_lock = threading.Lock()
+
+
+    def k8s_request(path):
+        with open(TOKEN_PATH) as f:
+            token = f.read().strip()
+        ctx = ssl.create_default_context(cafile=CA_PATH)
+        req = urllib.request.Request(
+            API + path,
+            headers={"Authorization": "Bearer " + token, "Accept": "application/json"},
+        )
+        with urllib.request.urlopen(req, context=ctx, timeout=15) as resp:
+            return json.loads(resp.read().decode())
+
+
+    def gateway_base_url(gw_ns, gw_name):
+        key = f"{gw_ns}/{gw_name}"
+        with GATEWAY_CACHE_LOCK:
+            if key in GATEWAY_CACHE:
+                return GATEWAY_CACHE[key]
+        data = k8s_request(f"/api/v1/namespaces/{gw_ns}/services")
+        base = None
+        for svc in data.get("items", []):
+            labels = svc.get("metadata", {}).get("labels", {}) or {}
+            if labels.get("gateway.networking.k8s.io/gateway-name") == gw_name:
+                port = 80
+                for p in svc.get("spec", {}).get("ports", []):
+                    if p.get("port") == 80 or p.get("name") in ("http", "http-80"):
+                        port = p["port"]
+                        break
+                name = svc["metadata"]["name"]
+                base = f"http://{name}.{gw_ns}.svc.cluster.local:{port}"
+                break
+        if not base:
+            base = f"http://{gw_name}.{gw_ns}.svc.cluster.local:80"
+        with GATEWAY_CACHE_LOCK:
+            GATEWAY_CACHE[key] = base
+        return base
+
+
+    def extract_paths(rule):
+        paths = []
+        for match in rule.get("matches", []) or []:
+            p = match.get("path", {})
+            if p.get("value"):
+                paths.append(p["value"])
+        return paths or ["/"]
+
+
+    def discover_routes():
+        data = k8s_request("/apis/gateway.networking.k8s.io/v1/httproutes")
+        routes = []
+        for item in data.get("items", []):
+            meta = item.get("metadata", {})
+            spec = item.get("spec", {}) or {}
+            ns = meta.get("namespace", "default")
+            name = meta.get("name", "")
+            hostnames = spec.get("hostnames") or []
+            parent_refs = spec.get("parentRefs") or [{}]
+            parent = parent_refs[0]
+            gw_ns = parent.get("namespace") or ns
+            gw_name = parent.get("name") or "main-gateway"
+            try:
+                gw_url = gateway_base_url(gw_ns, gw_name)
+            except Exception:
+                gw_url = f"http://{gw_name}.{gw_ns}.svc.cluster.local:80"
+
+            all_paths = []
+            for rule in spec.get("rules", []) or []:
+                all_paths.extend(extract_paths(rule))
+            if not all_paths:
+                all_paths = ["/"]
+
+            targets = []
+            for hostname in hostnames or ["*"]:
+                for path in all_paths:
+                    targets.append(
+                        {
+                            "id": f"{ns}/{name}|{hostname}|{path}",
+                            "hostname": hostname,
+                            "path": path,
+                            "gateway_url": gw_url,
+                        }
+                    )
+
+            routes.append(
+                {
+                    "id": f"{ns}/{name}",
+                    "namespace": ns,
+                    "name": name,
+                    "hostnames": hostnames,
+                    "paths": sorted(set(all_paths)),
+                    "gateway": f"{gw_ns}/{gw_name}",
+                    "targets": targets,
+                }
+            )
+        routes.sort(key=lambda r: (r["namespace"], r["name"]))
+        return routes
+
+
+    class LoadTest:
+        def __init__(self, config):
+            self.config = config
+            self.running = False
+            self.done = False
+            self.lock = threading.Lock()
+            self.start_time = None
+            self.total = 0
+            self.errors = 0
+            self.latencies = []
+            self.status_codes = defaultdict(int)
+            self.throughput_history = []
+            self.latency_history = []
+            self._threads = []
+            self._collector = None
+            self._window_count = 0
+
+        def snapshot(self):
+            with self.lock:
+                elapsed = max(time.time() - self.start_time, 0.001) if self.start_time else 0
+                lats = list(self.latencies)
+                avg = sum(lats) / len(lats) if lats else 0
+                rps = self.total / elapsed if elapsed else 0
+                err_rate = (self.errors / self.total) if self.total else 0
+                return {
+                    "running": self.running,
+                    "done": self.done,
+                    "elapsed_sec": round(elapsed, 2),
+                    "total_requests": self.total,
+                    "requests_per_sec": round(rps, 2),
+                    "latency_avg_ms": round(avg, 2),
+                    "latency_min_ms": round(min(lats), 2) if lats else 0,
+                    "latency_max_ms": round(max(lats), 2) if lats else 0,
+                    "error_rate": round(err_rate, 4),
+                    "status_codes": dict(self.status_codes),
+                    "throughput_history": list(self.throughput_history),
+                    "latency_history": list(self.latency_history),
+                }
+
+        def start(self):
+            self.running = True
+            self.start_time = time.time()
+            users = max(1, int(self.config.get("concurrent_users", 1)))
+            ramp = max(0, float(self.config.get("ramp_up_sec", 0)))
+            stagger = ramp / users if users else 0
+            self._collector = threading.Thread(target=self._collect_metrics, daemon=True)
+            self._collector.start()
+            for i in range(users):
+                t = threading.Thread(target=self._worker, args=(i * stagger,), daemon=True)
+                self._threads.append(t)
+                t.start()
+            threading.Thread(target=self._watch_duration, daemon=True).start()
+
+        def stop(self):
+            self.running = False
+
+        def _watch_duration(self):
+            duration = float(self.config.get("duration_sec", 60))
+            time.sleep(duration)
+            self.running = False
+            for t in self._threads:
+                t.join(timeout=5)
+            self.done = True
+
+        def _collect_metrics(self):
+            while self.running or not self.done:
+                time.sleep(1)
+                with self.lock:
+                    if not self.start_time:
+                        continue
+                    elapsed = time.time() - self.start_time
+                    count = self._window_count
+                    self._window_count = 0
+                    lats = list(self.latencies[-count:]) if count else []
+                    rps = count
+                    avg = sum(lats) / len(lats) if lats else 0
+                    self.throughput_history.append({"t": round(elapsed, 1), "rps": rps})
+                    self.latency_history.append({"t": round(elapsed, 1), "avg_ms": round(avg, 2)})
+                    if len(self.throughput_history) > 300:
+                        self.throughput_history = self.throughput_history[-300:]
+                        self.latency_history = self.latency_history[-300:]
+                if self.done:
+                    break
+
+        def _worker(self, delay):
+            time.sleep(delay)
+            targets = self.config.get("targets") or []
+            if not targets:
+                return
+            method = (self.config.get("method") or "GET").upper()
+            body = self.config.get("body") or ""
+            body_bytes = body.encode() if body else None
+            extra_headers = self.config.get("headers") or {}
+            interval = max(0, float(self.config.get("interval_ms", 0))) / 1000.0
+            duration = float(self.config.get("duration_sec", 60))
+
+            while self.running:
+                if time.time() - self.start_time >= duration:
+                    break
+                target = random.choice(targets)
+                hostname = target["hostname"]
+                path = target.get("path") or "/"
+                if not path.startswith("/"):
+                    path = "/" + path
+                url = target["gateway_url"].rstrip("/") + path
+                headers = {"Host": hostname, "User-Agent": "stress-app/1.0"}
+                headers.update(extra_headers)
+                if body_bytes and method in ("POST", "PUT", "PATCH"):
+                    headers.setdefault("Content-Type", "application/json")
+                req = urllib.request.Request(
+                    url,
+                    data=body_bytes if method != "GET" else None,
+                    headers=headers,
+                    method=method,
+                )
+                start = time.time()
+                status = 0
+                error = False
+                try:
+                    with urllib.request.urlopen(req, timeout=30) as resp:
+                        status = resp.status
+                except urllib.error.HTTPError as e:
+                    status = e.code
+                except Exception:
+                    error = True
+                latency_ms = (time.time() - start) * 1000
+                with self.lock:
+                    self.total += 1
+                    self._window_count += 1
+                    if error or status >= 400:
+                        self.errors += 1
+                    if status:
+                        self.status_codes[str(status)] += 1
+                    else:
+                        self.status_codes["error"] += 1
+                    self.latencies.append(latency_ms)
+                    if len(self.latencies) > 50000:
+                        self.latencies = self.latencies[-25000:]
+                if interval > 0:
+                    time.sleep(interval)
+
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, fmt, *args):
+            pass
+
+        def _json_response(self, code, payload):
+            body = json.dumps(payload).encode()
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def _read_body(self):
+            length = int(self.headers.get("Content-Length", 0))
+            if length:
+                return self.rfile.read(length)
+            return b""
+
+        def do_GET(self):
+            path = urlparse(self.path).path
+            if path in ("/", "/index.html"):
+                body = HTML_PATH.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            if path == "/health":
+                self._json_response(200, {"status": "ok"})
+                return
+            if path == "/api/routes":
+                try:
+                    routes = discover_routes()
+                    self._json_response(200, {"routes": routes})
+                except Exception as exc:
+                    self._json_response(500, {"error": str(exc), "routes": []})
+                return
+            if path == "/api/test/status":
+                global current_test
+                with test_lock:
+                    test = current_test
+                if test:
+                    self._json_response(200, test.snapshot())
+                else:
+                    self._json_response(
+                        200,
+                        {
+                            "running": False,
+                            "done": False,
+                            "total_requests": 0,
+                            "requests_per_sec": 0,
+                            "latency_avg_ms": 0,
+                            "latency_min_ms": 0,
+                            "latency_max_ms": 0,
+                            "error_rate": 0,
+                            "status_codes": {},
+                            "throughput_history": [],
+                            "latency_history": [],
+                            "elapsed_sec": 0,
+                        },
+                    )
+                return
+            self.send_error(404)
+
+        def do_POST(self):
+            global current_test
+            path = urlparse(self.path).path
+            if path == "/api/test/start":
+                try:
+                    config = json.loads(self._read_body().decode() or "{}")
+                except json.JSONDecodeError:
+                    self._json_response(400, {"error": "invalid JSON"})
+                    return
+                if not config.get("targets"):
+                    self._json_response(400, {"error": "no targets selected"})
+                    return
+                with test_lock:
+                    if current_test and current_test.running:
+                        self._json_response(409, {"error": "test already running"})
+                        return
+                    current_test = LoadTest(config)
+                    current_test.start()
+                self._json_response(200, {"status": "started"})
+                return
+            if path == "/api/test/stop":
+                with test_lock:
+                    if current_test:
+                        current_test.stop()
+                self._json_response(200, {"status": "stopping"})
+                return
+            self.send_error(404)
+
+
+    if __name__ == "__main__":
+        server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
+        print(f"stress-app listening on :{PORT}", flush=True)
+        server.serve_forever()
+  index.html: |
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>stress-app</title>
+    <style>
+      :root { --bg:#0f1419; --panel:#1a2332; --border:#2d3a4d; --text:#e7ecf3; --muted:#8b9cb3;
+              --accent:#3d8bfd; --ok:#3dd68c; --warn:#f5a524; --err:#f87171; }
+      * { box-sizing:border-box; }
+      body { margin:0; font-family:system-ui,sans-serif; background:var(--bg); color:var(--text); }
+      header { padding:1rem 1.5rem; border-bottom:1px solid var(--border); background:var(--panel); }
+      h1 { margin:0; font-size:1.25rem; }
+      main { display:grid; grid-template-columns:1fr 1fr; gap:1rem; padding:1rem; }
+      @media (max-width:1100px) { main { grid-template-columns:1fr; } }
+      section { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:1rem; }
+      h2 { margin:0 0 .75rem; font-size:1rem; }
+      label { display:block; font-size:.85rem; color:var(--muted); margin:.5rem 0 .25rem; }
+      input, select, textarea { width:100%; padding:.45rem .6rem; border-radius:6px; border:1px solid var(--border);
+        background:#0b1017; color:var(--text); }
+      textarea { min-height:4rem; font-family:monospace; font-size:.8rem; }
+      .routes { max-height:220px; overflow:auto; border:1px solid var(--border); border-radius:6px; padding:.5rem; }
+      .route-item { padding:.35rem 0; border-bottom:1px solid var(--border); font-size:.85rem; }
+      .route-item:last-child { border-bottom:none; }
+      .route-meta { color:var(--muted); font-size:.75rem; }
+      .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:.75rem; }
+      .btns { display:flex; gap:.5rem; margin-top:1rem; flex-wrap:wrap; }
+      button { padding:.5rem 1rem; border:none; border-radius:6px; cursor:pointer; font-weight:600; }
+      .primary { background:var(--accent); color:#fff; }
+      .danger { background:var(--err); color:#fff; }
+      .secondary { background:var(--border); color:var(--text); }
+      button:disabled { opacity:.5; cursor:not-allowed; }
+      .metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:.5rem; }
+      .metric { background:#0b1017; border:1px solid var(--border); border-radius:6px; padding:.6rem; }
+      .metric span { display:block; font-size:.7rem; color:var(--muted); }
+      .metric strong { font-size:1.1rem; }
+      canvas { width:100%; height:160px; background:#0b1017; border:1px solid var(--border); border-radius:6px; }
+      .status-warn { color:var(--warn); }
+      #statusMsg { font-size:.85rem; color:var(--muted); margin-top:.5rem; }
+      .full { grid-column:1 / -1; }
+    </style>
+    </head>
+    <body>
+    <header><h1>stress-app &mdash; HTTPRoute load tester</h1></header>
+    <main>
+      <section>
+        <h2>Discovered HTTPRoutes</h2>
+        <div class="btns" style="margin-top:0">
+          <button class="secondary" id="refreshBtn" type="button">Refresh</button>
+          <button class="secondary" id="selectAllBtn" type="button">Select all</button>
+          <button class="secondary" id="clearBtn" type="button">Clear</button>
+        </div>
+        <div class="routes" id="routesList"><em>Loading...</em></div>
+      </section>
+      <section>
+        <h2>Load configuration</h2>
+        <div class="grid2">
+          <div><label>Concurrent users</label><input id="users" type="number" min="1" value="5"></div>
+          <div><label>Duration (sec)</label><input id="duration" type="number" min="1" value="60"></div>
+          <div><label>Ramp-up (sec)</label><input id="rampUp" type="number" min="0" value="10"></div>
+          <div><label>Interval between requests (ms)</label><input id="interval" type="number" min="0" value="0"></div>
+        </div>
+        <label>HTTP method</label>
+        <select id="method"><option>GET</option><option>POST</option></select>
+        <label>POST body (optional)</label>
+        <textarea id="body" placeholder='{"key":"value"}'></textarea>
+        <label>Extra headers (JSON object, optional)</label>
+        <textarea id="headers" placeholder='{"X-Test":"1"}'></textarea>
+        <div class="btns">
+          <button class="primary" id="startBtn" type="button">Start test</button>
+          <button class="danger" id="stopBtn" type="button" disabled>Stop test</button>
+        </div>
+        <div id="statusMsg"></div>
+      </section>
+      <section class="full">
+        <h2>Metrics</h2>
+        <div class="metrics" id="metrics"></div>
+        <h2 style="margin-top:1rem">Throughput (req/s)</h2>
+        <canvas id="throughputChart" width="800" height="160"></canvas>
+        <h2 style="margin-top:1rem">Latency (avg ms)</h2>
+        <canvas id="latencyChart" width="800" height="160"></canvas>
+      </section>
+    </main>
+    <script>
+    let routes = [];
+    let pollTimer = null;
+
+    function el(id) { return document.getElementById(id); }
+
+    async function fetchRoutes() {
+      el('routesList').innerHTML = '<em>Loading...</em>';
+      try {
+        const res = await fetch('/api/routes');
+        const data = await res.json();
+        routes = data.routes || [];
+        renderRoutes();
+      } catch (e) {
+        el('routesList').innerHTML = '<span class="status-warn">Failed to load routes: ' + e + '</span>';
+      }
+    }
+
+    function renderRoutes() {
+      if (!routes.length) {
+        el('routesList').innerHTML = '<em>No HTTPRoutes found.</em>';
+        return;
+      }
+      el('routesList').innerHTML = routes.map(r => {
+        const hosts = (r.hostnames || []).join(', ') || '(no hostname)';
+        const paths = (r.paths || []).join(', ');
+        return '<div class="route-item"><label><input type="checkbox" class="route-cb" value="' + r.id + '"> ' +
+          '<strong>' + r.namespace + '/' + r.name + '</strong></label>' +
+          '<div class="route-meta">hosts: ' + hosts + ' | paths: ' + paths + ' | gateway: ' + r.gateway + '</div></div>';
+      }).join('');
+    }
+
+    function selectedTargets() {
+      const ids = new Set([...document.querySelectorAll('.route-cb:checked')].map(c => c.value));
+      const targets = [];
+      routes.forEach(r => {
+        if (ids.has(r.id)) targets.push(...(r.targets || []));
+      });
+      return targets;
+    }
+
+    function parseJsonField(raw, fallback) {
+      if (!raw.trim()) return fallback;
+      return JSON.parse(raw);
+    }
+
+    async function startTest() {
+      const targets = selectedTargets();
+      if (!targets.length) { el('statusMsg').textContent = 'Select at least one HTTPRoute.'; return; }
+      let headers = {};
+      try { headers = parseJsonField(el('headers').value, {}); }
+      catch (e) { el('statusMsg').textContent = 'Invalid headers JSON.'; return; }
+      const payload = {
+        targets,
+        concurrent_users: +el('users').value,
+        duration_sec: +el('duration').value,
+        ramp_up_sec: +el('rampUp').value,
+        interval_ms: +el('interval').value,
+        method: el('method').value,
+        body: el('body').value,
+        headers
+      };
+      el('statusMsg').textContent = 'Starting...';
+      const res = await fetch('/api/test/start', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      const data = await res.json();
+      if (!res.ok) { el('statusMsg').textContent = data.error || 'Start failed'; return; }
+      el('statusMsg').textContent = 'Test running...';
+      el('startBtn').disabled = true;
+      el('stopBtn').disabled = false;
+      if (!pollTimer) pollTimer = setInterval(pollStatus, 1000);
+    }
+
+    async function stopTest() {
+      await fetch('/api/test/stop', { method:'POST' });
+      el('statusMsg').textContent = 'Stopping...';
+    }
+
+    function renderMetrics(m) {
+      const items = [
+        ['Total requests', m.total_requests],
+        ['Req/s', m.requests_per_sec],
+        ['Avg latency (ms)', m.latency_avg_ms],
+        ['Min latency (ms)', m.latency_min_ms],
+        ['Max latency (ms)', m.latency_max_ms],
+        ['Error rate', (m.error_rate * 100).toFixed(2) + '%'],
+        ['Elapsed (s)', m.elapsed_sec],
+        ['Status codes', JSON.stringify(m.status_codes || {})]
+      ];
+      el('metrics').innerHTML = items.map(([k,v]) => '<div class="metric"><span>' + k + '</span><strong>' + v + '</strong></div>').join('');
+      drawChart('throughputChart', m.throughput_history || [], 'rps', '#3d8bfd');
+      drawChart('latencyChart', m.latency_history || [], 'avg_ms', '#3dd68c');
+    }
+
+    function drawChart(canvasId, data, key, color) {
+      const canvas = el(canvasId);
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width, h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+      ctx.strokeStyle = '#2d3a4d';
+      ctx.beginPath(); ctx.moveTo(40,10); ctx.lineTo(40,h-20); ctx.lineTo(w-10,h-20); ctx.stroke();
+      if (!data.length) return;
+      const vals = data.map(d => d[key]);
+      const maxV = Math.max(...vals, 1);
+      const xs = data.length > 1 ? (w - 50) / (data.length - 1) : 0;
+      ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.beginPath();
+      data.forEach((d, i) => {
+        const x = 40 + i * xs;
+        const y = h - 20 - (d[key] / maxV) * (h - 40);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+    }
+
+    async function pollStatus() {
+      const res = await fetch('/api/test/status');
+      const m = await res.json();
+      renderMetrics(m);
+      if (!m.running) {
+        el('startBtn').disabled = false;
+        el('stopBtn').disabled = true;
+        el('statusMsg').textContent = m.done ? 'Test finished.' : 'Test stopped.';
+        clearInterval(pollTimer); pollTimer = null;
+      }
+    }
+
+    el('refreshBtn').onclick = fetchRoutes;
+    el('selectAllBtn').onclick = () => document.querySelectorAll('.route-cb').forEach(c => c.checked = true);
+    el('clearBtn').onclick = () => document.querySelectorAll('.route-cb').forEach(c => c.checked = false);
+    el('startBtn').onclick = startTest;
+    el('stopBtn').onclick = stopTest;
+    fetchRoutes();
+    </script>
+    </body>
+    </html>
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: stress-app
+  namespace: example-apps
+  annotations:
+    argocd.argoproj.io/sync-wave: "35"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: stress-app-httproute-reader
+  annotations:
+    argocd.argoproj.io/sync-wave: "35"
+rules:
+  - apiGroups:
+      - gateway.networking.k8s.io
+    resources:
+      - httproutes
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - services
+    verbs:
+      - get
+      - list
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: stress-app-httproute-reader
+  annotations:
+    argocd.argoproj.io/sync-wave: "35"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: stress-app-httproute-reader
+subjects:
+  - kind: ServiceAccount
+    name: stress-app
+    namespace: example-apps
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stress-app
+  namespace: example-apps
+  labels:
+    app: stress-app
+  annotations:
+    argocd.argoproj.io/sync-wave: "35"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: stress-app
+  template:
+    metadata:
+      labels:
+        app: stress-app
+    spec:
+      serviceAccountName: stress-app
+      containers:
+        - name: stress-app
+          image: docker.io/library/python:3-alpine
+          command:
+            - python3
+            - /app/app.py
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          volumeMounts:
+            - name: code
+              mountPath: /app
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: "2"
+              memory: 512Mi
+      volumes:
+        - name: code
+          configMap:
+            name: stress-app
+            defaultMode: 0555
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: stress-app
+  namespace: example-apps
+  labels:
+    app: stress-app
+  annotations:
+    argocd.argoproj.io/sync-wave: "35"
+spec:
+  selector:
+    app: stress-app
+  type: ClusterIP
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: stress-app
+  namespace: example-apps
+  labels:
+    app: stress-app
+  annotations:
+    argocd.argoproj.io/sync-wave: "36"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  to:
+    kind: Service
+    name: stress-app
+    weight: 100
+  port:
+    targetPort: http

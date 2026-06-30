@@ -405,109 +405,287 @@ data:
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>stress-app</title>
     <style>
-      :root { --bg:#0f1419; --panel:#1a2332; --border:#2d3a4d; --text:#e7ecf3; --muted:#8b9cb3;
-              --accent:#3d8bfd; --ok:#3dd68c; --warn:#f5a524; --err:#f87171; }
+      :root {
+        --bg0:#080b12; --bg1:#0e1420; --bg2:#151d2e; --bg3:#1c273c;
+        --border:rgba(255,255,255,.08); --border-strong:rgba(255,255,255,.14);
+        --text:#edf2ff; --muted:#8fa3bf; --dim:#5c6f88;
+        --accent:#5b8cff; --accent2:#7c5cff; --accent-glow:rgba(91,140,255,.25);
+        --ok:#2fd67a; --ok-bg:rgba(47,214,122,.12);
+        --warn:#ffb020; --warn-bg:rgba(255,176,32,.12);
+        --err:#ff5c6c; --err-bg:rgba(255,92,108,.12);
+        --radius:14px; --radius-sm:10px;
+        --shadow:0 18px 50px rgba(0,0,0,.35);
+      }
       * { box-sizing:border-box; }
-      body { margin:0; font-family:system-ui,sans-serif; background:var(--bg); color:var(--text); }
-      header { padding:1rem 1.5rem; border-bottom:1px solid var(--border); background:var(--panel); }
-      h1 { margin:0; font-size:1.25rem; }
-      main { display:grid; grid-template-columns:1fr 1fr; gap:1rem; padding:1rem; }
-      @media (max-width:1100px) { main { grid-template-columns:1fr; } }
-      section { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:1rem; }
-      h2 { margin:0 0 .75rem; font-size:1rem; }
-      h3 { margin:1rem 0 .5rem; font-size:.9rem; color:var(--muted); font-weight:600; }
-      label { display:block; font-size:.85rem; color:var(--muted); margin:.5rem 0 .25rem; }
-      input, select, textarea { width:100%; padding:.45rem .6rem; border-radius:6px; border:1px solid var(--border);
-        background:#0b1017; color:var(--text); }
-      textarea { min-height:4rem; font-family:monospace; font-size:.8rem; }
-      .routes { max-height:260px; overflow:auto; border:1px solid var(--border); border-radius:6px; padding:.5rem; }
-      .route-group { padding:.5rem 0; border-bottom:1px solid var(--border); }
-      .route-group:last-child { border-bottom:none; }
-      .route-header { display:flex; align-items:center; gap:.5rem; font-size:.85rem; }
-      .route-meta { color:var(--muted); font-size:.75rem; margin:.25rem 0 .35rem; }
-      .endpoint-item { font-size:.82rem; padding:.2rem 0 .2rem 1rem; }
-      .endpoint-item code { color:var(--accent); font-size:.78rem; }
-      .custom-row { display:grid; grid-template-columns:1fr 120px 1fr auto; gap:.5rem; align-items:end;
-        margin-bottom:.5rem; padding:.5rem; background:#0b1017; border:1px solid var(--border); border-radius:6px; }
+      html { scroll-behavior:smooth; }
+      body {
+        margin:0; min-height:100vh; color:var(--text);
+        font-family:Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        background:
+          radial-gradient(1200px 600px at 10% -10%, rgba(91,140,255,.18), transparent 55%),
+          radial-gradient(900px 500px at 100% 0%, rgba(124,92,255,.14), transparent 50%),
+          linear-gradient(180deg, var(--bg0), var(--bg1) 40%, #0b1018);
+      }
+      .shell { max-width:1320px; margin:0 auto; padding:1.25rem 1.25rem 2.5rem; }
+      .topbar {
+        display:flex; align-items:center; justify-content:space-between; gap:1rem;
+        padding:1rem 1.25rem; margin-bottom:1.25rem;
+        background:rgba(21,29,46,.72); border:1px solid var(--border);
+        border-radius:var(--radius); backdrop-filter:blur(12px); box-shadow:var(--shadow);
+      }
+      .brand { display:flex; align-items:center; gap:.9rem; min-width:0; }
+      .brand-icon {
+        width:42px; height:42px; border-radius:12px; flex-shrink:0;
+        background:linear-gradient(135deg, var(--accent), var(--accent2));
+        display:grid; place-items:center; font-weight:800; font-size:.95rem; color:#fff;
+        box-shadow:0 8px 24px var(--accent-glow);
+      }
+      .brand h1 { margin:0; font-size:1.15rem; letter-spacing:-.02em; }
+      .brand p { margin:.15rem 0 0; font-size:.82rem; color:var(--muted); }
+      .topbar-meta { display:flex; align-items:center; gap:.65rem; flex-wrap:wrap; justify-content:flex-end; }
+      .pill {
+        display:inline-flex; align-items:center; gap:.45rem; padding:.45rem .75rem;
+        border-radius:999px; font-size:.78rem; font-weight:600; border:1px solid var(--border);
+        background:rgba(255,255,255,.03); color:var(--muted);
+      }
+      .pill strong { color:var(--text); }
+      .pill.live { border-color:rgba(47,214,122,.35); background:var(--ok-bg); color:var(--ok); }
+      .pill.live::before {
+        content:""; width:8px; height:8px; border-radius:50%; background:var(--ok);
+        box-shadow:0 0 0 0 rgba(47,214,122,.6); animation:pulse 1.6s infinite;
+      }
+      @keyframes pulse {
+        0% { box-shadow:0 0 0 0 rgba(47,214,122,.55); }
+        70% { box-shadow:0 0 0 10px rgba(47,214,122,0); }
+        100% { box-shadow:0 0 0 0 rgba(47,214,122,0); }
+      }
+      .layout { display:grid; grid-template-columns:minmax(0,1.45fr) minmax(320px,.85fr); gap:1rem; align-items:start; }
+      @media (max-width:1050px) { .layout { grid-template-columns:1fr; } }
+      .card {
+        background:rgba(21,29,46,.78); border:1px solid var(--border);
+        border-radius:var(--radius); padding:1.1rem 1.15rem; box-shadow:var(--shadow);
+        backdrop-filter:blur(10px);
+      }
+      .card + .card { margin-top:1rem; }
+      .card-head { display:flex; align-items:flex-start; justify-content:space-between; gap:.75rem; margin-bottom:.85rem; }
+      .card-head h2 { margin:0; font-size:1rem; letter-spacing:-.01em; }
+      .card-head p { margin:.35rem 0 0; font-size:.8rem; color:var(--muted); line-height:1.45; }
+      .section-label {
+        margin:1rem 0 .55rem; font-size:.72rem; font-weight:700; letter-spacing:.08em;
+        text-transform:uppercase; color:var(--dim);
+      }
+      .toolbar { display:flex; gap:.5rem; flex-wrap:wrap; margin-bottom:.75rem; }
+      button, .btn {
+        appearance:none; border:1px solid transparent; border-radius:10px;
+        padding:.55rem .9rem; font:inherit; font-size:.82rem; font-weight:600;
+        cursor:pointer; transition:transform .15s ease, background .15s ease, border-color .15s ease, opacity .15s;
+      }
+      button:hover:not(:disabled) { transform:translateY(-1px); }
+      button:disabled { opacity:.45; cursor:not-allowed; transform:none; }
+      .btn-primary {
+        color:#fff; background:linear-gradient(135deg, var(--accent), #4b79e8);
+        box-shadow:0 10px 24px var(--accent-glow);
+      }
+      .btn-danger { color:#fff; background:linear-gradient(135deg, #ff6b7a, var(--err)); }
+      .btn-ghost { color:var(--text); background:rgba(255,255,255,.04); border-color:var(--border); }
+      .btn-ghost:hover:not(:disabled) { background:rgba(255,255,255,.07); border-color:var(--border-strong); }
+      .btn-text { background:none; border:none; color:var(--accent); padding:.2rem .35rem; font-size:.75rem; }
+      .routes {
+        max-height:340px; overflow:auto; padding:.2rem;
+        border:1px solid var(--border); border-radius:var(--radius-sm); background:rgba(8,11,18,.55);
+      }
+      .routes::-webkit-scrollbar { width:8px; }
+      .routes::-webkit-scrollbar-thumb { background:rgba(255,255,255,.12); border-radius:999px; }
+      .route-group { padding:.65rem; border:1px solid var(--border); border-radius:12px; background:rgba(255,255,255,.02); }
+      .route-group + .route-group { margin-top:.55rem; }
+      .route-top { display:flex; align-items:center; justify-content:space-between; gap:.5rem; margin-bottom:.35rem; }
+      .route-title { display:flex; align-items:center; gap:.5rem; min-width:0; }
+      .ns-badge {
+        font-size:.68rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
+        color:#b9c9ff; background:rgba(91,140,255,.14); border:1px solid rgba(91,140,255,.22);
+        padding:.18rem .45rem; border-radius:6px; flex-shrink:0;
+      }
+      .route-name { font-size:.88rem; font-weight:650; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .route-meta { font-size:.74rem; color:var(--dim); margin-bottom:.5rem; }
+      .endpoint-grid { display:grid; gap:.4rem; }
+      .endpoint-tile {
+        display:flex; align-items:center; gap:.65rem; padding:.55rem .65rem;
+        border:1px solid var(--border); border-radius:10px; background:rgba(255,255,255,.02);
+        cursor:pointer; transition:border-color .15s, background .15s, box-shadow .15s;
+      }
+      .endpoint-tile:hover { border-color:var(--border-strong); background:rgba(255,255,255,.04); }
+      .endpoint-tile.selected {
+        border-color:rgba(91,140,255,.55); background:rgba(91,140,255,.1);
+        box-shadow:inset 0 0 0 1px rgba(91,140,255,.18);
+      }
+      .endpoint-tile input { position:absolute; opacity:0; pointer-events:none; }
+      .endpoint-check {
+        width:18px; height:18px; border-radius:6px; border:1px solid var(--border-strong);
+        display:grid; place-items:center; flex-shrink:0; color:transparent; font-size:.72rem; font-weight:800;
+        background:rgba(0,0,0,.2);
+      }
+      .endpoint-tile.selected .endpoint-check {
+        color:#fff; border-color:transparent; background:linear-gradient(135deg, var(--accent), var(--accent2));
+      }
+      .endpoint-info { min-width:0; flex:1; }
+      .endpoint-host { font-size:.8rem; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .endpoint-path {
+        display:inline-block; margin-top:.15rem; font-size:.72rem; font-family:ui-monospace, SFMono-Regular, Menlo, monospace;
+        color:#9ec1ff; background:rgba(91,140,255,.12); border:1px solid rgba(91,140,255,.18);
+        padding:.12rem .4rem; border-radius:6px;
+      }
+      .custom-list { display:grid; gap:.55rem; }
+      .custom-row {
+        display:grid; grid-template-columns:1.2fr .7fr 1.2fr auto; gap:.55rem; align-items:end;
+        padding:.7rem; border:1px solid var(--border); border-radius:12px; background:rgba(8,11,18,.45);
+      }
       @media (max-width:900px) { .custom-row { grid-template-columns:1fr; } }
-      .custom-row label { margin-top:0; }
-      .custom-row .remove-row { padding:.45rem .65rem; margin-bottom:0; white-space:nowrap; }
-      .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:.75rem; }
-      .btns { display:flex; gap:.5rem; margin-top:1rem; flex-wrap:wrap; }
-      button { padding:.5rem 1rem; border:none; border-radius:6px; cursor:pointer; font-weight:600; }
-      .primary { background:var(--accent); color:#fff; }
-      .danger { background:var(--err); color:#fff; }
-      .secondary { background:var(--border); color:var(--text); }
-      .link-btn { background:none; border:none; color:var(--accent); padding:0; font-size:.75rem; cursor:pointer; font-weight:600; }
-      button:disabled { opacity:.5; cursor:not-allowed; }
-      .metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:.5rem; }
-      .metric { background:#0b1017; border:1px solid var(--border); border-radius:6px; padding:.6rem; }
-      .metric span { display:block; font-size:.7rem; color:var(--muted); }
-      .metric strong { font-size:1.1rem; }
-      canvas { width:100%; height:160px; background:#0b1017; border:1px solid var(--border); border-radius:6px; }
-      .status-warn { color:var(--warn); }
-      #statusMsg, #targetCount { font-size:.85rem; color:var(--muted); margin-top:.5rem; }
-      #targetCount { margin-top:.35rem; }
-      .full { grid-column:1 / -1; }
-      .hint { font-size:.8rem; color:var(--muted); margin:0 0 .75rem; }
+      label { display:block; font-size:.74rem; font-weight:600; color:var(--muted); margin:0 0 .3rem; }
+      input, select, textarea {
+        width:100%; padding:.58rem .72rem; border-radius:10px; border:1px solid var(--border);
+        background:rgba(8,11,18,.75); color:var(--text); font:inherit; font-size:.84rem;
+        transition:border-color .15s, box-shadow .15s;
+      }
+      input:focus, select:focus, textarea:focus {
+        outline:none; border-color:rgba(91,140,255,.55); box-shadow:0 0 0 3px rgba(91,140,255,.15);
+      }
+      textarea { min-height:4.5rem; resize:vertical; font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:.78rem; }
+      .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:.65rem; }
+      .config-actions { display:grid; grid-template-columns:1fr 1fr; gap:.55rem; margin-top:1rem; }
+      .config-actions button { width:100%; }
+      .alert {
+        margin-top:.85rem; padding:.65rem .8rem; border-radius:10px; font-size:.8rem; line-height:1.4;
+        border:1px solid var(--border); background:rgba(255,255,255,.03); color:var(--muted); min-height:2.6rem;
+      }
+      .alert.warn { border-color:rgba(255,176,32,.35); background:var(--warn-bg); color:#ffd89a; }
+      .alert.ok { border-color:rgba(47,214,122,.35); background:var(--ok-bg); color:#b7f5d2; }
+      .metrics-wrap { margin-top:1rem; }
+      .metrics {
+        display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:.65rem;
+      }
+      .metric {
+        position:relative; overflow:hidden; padding:.85rem .9rem; border-radius:12px;
+        border:1px solid var(--border); background:rgba(8,11,18,.55);
+      }
+      .metric::before {
+        content:""; position:absolute; left:0; right:0; top:0; height:3px;
+        background:linear-gradient(90deg, var(--accent), var(--accent2));
+        opacity:.85;
+      }
+      .metric.warn::before { background:linear-gradient(90deg, #ffb020, #ff7a45); }
+      .metric.ok::before { background:linear-gradient(90deg, #2fd67a, #18b86f); }
+      .metric span { display:block; font-size:.72rem; color:var(--muted); margin-bottom:.25rem; }
+      .metric strong { font-size:1.2rem; letter-spacing:-.02em; }
+      .metric small { display:block; margin-top:.2rem; font-size:.68rem; color:var(--dim); word-break:break-all; }
+      .charts { display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-top:1rem; }
+      @media (max-width:900px) { .charts { grid-template-columns:1fr; } }
+      .chart-panel {
+        border:1px solid var(--border); border-radius:12px; padding:.8rem .85rem .7rem;
+        background:rgba(8,11,18,.55);
+      }
+      .chart-panel h3 { margin:0 0 .55rem; font-size:.82rem; color:var(--muted); font-weight:600; }
+      canvas {
+        width:100%; height:170px; display:block; border-radius:10px;
+        background:linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,0));
+      }
+      .empty { padding:1.2rem; text-align:center; color:var(--dim); font-size:.84rem; }
+      .sticky { position:sticky; top:1rem; }
+      body.testing .topbar { border-color:rgba(47,214,122,.25); }
     </style>
     </head>
     <body>
-    <header><h1>stress-app &mdash; HTTPRoute load tester</h1></header>
-    <main>
-      <section class="full">
-        <h2>Test targets</h2>
-        <p class="hint">Select individual endpoints from discovered HTTPRoutes and/or add custom endpoints. The load test rotates randomly across all selected targets.</p>
-        <div id="targetCount">0 endpoints selected</div>
-
-        <h3>Discovered HTTPRoutes</h3>
-        <div class="btns" style="margin-top:0">
-          <button class="secondary" id="refreshBtn" type="button">Refresh</button>
-          <button class="secondary" id="selectAllBtn" type="button">Select all endpoints</button>
-          <button class="secondary" id="clearBtn" type="button">Clear selection</button>
+    <div class="shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-icon">SA</div>
+          <div>
+            <h1>stress-app</h1>
+            <p>HTTPRoute discovery &amp; in-cluster load testing</p>
+          </div>
         </div>
-        <div class="routes" id="routesList"><em>Loading...</em></div>
-
-        <h3>Custom endpoints</h3>
-        <p class="hint">Add any hostname/path combination. Gateway URL defaults to the discovered gateway below.</p>
-        <label>Default gateway URL</label>
-        <input id="defaultGateway" placeholder="http://main-gateway-istio.istio-ingress.svc.cluster.local:80">
-        <div id="customEndpoints"></div>
-        <div class="btns" style="margin-top:.5rem">
-          <button class="secondary" id="addEndpointBtn" type="button">Add endpoint</button>
+        <div class="topbar-meta">
+          <div class="pill" id="targetCountPill"><strong id="targetCount">0</strong> endpoints</div>
+          <div class="pill" id="runPill" hidden>Test running</div>
         </div>
-      </section>
+      </header>
 
-      <section>
-        <h2>Load configuration</h2>
-        <div class="grid2">
-          <div><label>Concurrent users</label><input id="users" type="number" min="1" value="5"></div>
-          <div><label>Duration (sec)</label><input id="duration" type="number" min="1" value="60"></div>
-          <div><label>Ramp-up (sec)</label><input id="rampUp" type="number" min="0" value="10"></div>
-          <div><label>Interval between requests (ms)</label><input id="interval" type="number" min="0" value="0"></div>
-        </div>
-        <label>HTTP method</label>
-        <select id="method"><option>GET</option><option>POST</option></select>
-        <label>POST body (optional)</label>
-        <textarea id="body" placeholder='{"key":"value"}'></textarea>
-        <label>Extra headers (JSON object, optional)</label>
-        <textarea id="headers" placeholder='{"X-Test":"1"}'></textarea>
-        <div class="btns">
-          <button class="primary" id="startBtn" type="button">Start test</button>
-          <button class="danger" id="stopBtn" type="button" disabled>Stop test</button>
-        </div>
-        <div id="statusMsg"></div>
-      </section>
+      <div class="layout">
+        <div class="main-col">
+          <section class="card">
+            <div class="card-head">
+              <div>
+                <h2>Test targets</h2>
+                <p>Select discovered endpoints and/or add custom targets. Traffic is distributed randomly across the selection.</p>
+              </div>
+            </div>
 
-      <section class="full">
-        <h2>Metrics</h2>
-        <div class="metrics" id="metrics"></div>
-        <h2 style="margin-top:1rem">Throughput (req/s)</h2>
-        <canvas id="throughputChart" width="800" height="160"></canvas>
-        <h2 style="margin-top:1rem">Latency (avg ms)</h2>
-        <canvas id="latencyChart" width="800" height="160"></canvas>
-      </section>
-    </main>
+            <div class="section-label">Discovered HTTPRoutes</div>
+            <div class="toolbar">
+              <button class="btn-ghost" id="refreshBtn" type="button">Refresh</button>
+              <button class="btn-ghost" id="selectAllBtn" type="button">Select all</button>
+              <button class="btn-ghost" id="clearBtn" type="button">Clear</button>
+            </div>
+            <div class="routes" id="routesList"><div class="empty">Loading routes...</div></div>
+
+            <div class="section-label">Custom endpoints</div>
+            <label for="defaultGateway">Default gateway URL</label>
+            <input id="defaultGateway" placeholder="http://main-gateway-istio.istio-ingress.svc.cluster.local:80">
+            <div class="custom-list" id="customEndpoints" style="margin-top:.65rem"></div>
+            <div class="toolbar" style="margin-top:.55rem;margin-bottom:0">
+              <button class="btn-ghost" id="addEndpointBtn" type="button">+ Add endpoint</button>
+            </div>
+          </section>
+
+          <section class="card metrics-wrap">
+            <div class="card-head">
+              <div>
+                <h2>Live metrics</h2>
+                <p>Throughput and latency from stress-app workers (not backend app metrics).</p>
+              </div>
+            </div>
+            <div class="metrics" id="metrics"></div>
+            <div class="charts">
+              <div class="chart-panel">
+                <h3>Throughput (req/s)</h3>
+                <canvas id="throughputChart" width="800" height="170"></canvas>
+              </div>
+              <div class="chart-panel">
+                <h3>Latency (avg ms)</h3>
+                <canvas id="latencyChart" width="800" height="170"></canvas>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <aside class="sticky">
+          <section class="card">
+            <div class="card-head">
+              <div>
+                <h2>Load profile</h2>
+                <p>Configure concurrency, timing and request shape.</p>
+              </div>
+            </div>
+            <div class="grid2">
+              <div><label for="users">Concurrent users</label><input id="users" type="number" min="1" value="5"></div>
+              <div><label for="duration">Duration (sec)</label><input id="duration" type="number" min="1" value="60"></div>
+              <div><label for="rampUp">Ramp-up (sec)</label><input id="rampUp" type="number" min="0" value="10"></div>
+              <div><label for="interval">Interval (ms)</label><input id="interval" type="number" min="0" value="0"></div>
+            </div>
+            <label for="method" style="margin-top:.65rem">HTTP method</label>
+            <select id="method"><option>GET</option><option>POST</option></select>
+            <label for="body">POST body</label>
+            <textarea id="body" placeholder='{"key":"value"}'></textarea>
+            <label for="headers">Extra headers (JSON)</label>
+            <textarea id="headers" placeholder='{"X-Test":"1"}'></textarea>
+            <div class="config-actions">
+              <button class="btn-primary" id="startBtn" type="button">Start test</button>
+              <button class="btn-danger" id="stopBtn" type="button" disabled>Stop</button>
+            </div>
+            <div class="alert" id="statusMsg">Ready.</div>
+          </section>
+        </aside>
+      </div>
+    </div>
     <script>
     let routes = [];
     let defaultGateway = '';
@@ -519,19 +697,45 @@ data:
       return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
     }
 
+    function setStatus(msg, kind) {
+      const box = el('statusMsg');
+      box.textContent = msg;
+      box.className = 'alert' + (kind ? ' ' + kind : '');
+    }
+
+    function setRunning(active) {
+      document.body.classList.toggle('testing', active);
+      el('runPill').hidden = !active;
+      if (active) el('runPill').className = 'pill live';
+    }
+
     function updateTargetCount() {
       const n = selectedTargets().length;
-      el('targetCount').textContent = n + ' endpoint' + (n === 1 ? '' : 's') + ' selected';
+      el('targetCount').textContent = n;
+    }
+
+    function bindEndpointTiles() {
+      document.querySelectorAll('.endpoint-tile').forEach(function(tile) {
+        const cb = tile.querySelector('.endpoint-cb');
+        function sync() { tile.classList.toggle('selected', cb.checked); updateTargetCount(); }
+        tile.onclick = function(e) {
+          if (e.target.tagName === 'A') return;
+          cb.checked = !cb.checked;
+          sync();
+        };
+        cb.addEventListener('change', sync);
+        sync();
+      });
     }
 
     function addCustomRow(hostname, path, gateway) {
       const row = document.createElement('div');
       row.className = 'custom-row';
       row.innerHTML =
-        '<div><label>Hostname (Host header)</label><input class="ce-hostname" value="' + esc(hostname || '') + '"></div>' +
+        '<div><label>Hostname</label><input class="ce-hostname" value="' + esc(hostname || '') + '"></div>' +
         '<div><label>Path</label><input class="ce-path" value="' + esc(path || '/') + '"></div>' +
         '<div><label>Gateway URL</label><input class="ce-gateway" value="' + esc(gateway || el('defaultGateway').value || defaultGateway) + '"></div>' +
-        '<button type="button" class="danger remove-row">Remove</button>';
+        '<button type="button" class="btn-danger remove-row">Remove</button>';
       row.querySelector('.remove-row').onclick = function() { row.remove(); updateTargetCount(); };
       row.querySelectorAll('input').forEach(function(inp) { inp.addEventListener('input', updateTargetCount); });
       el('customEndpoints').appendChild(row);
@@ -539,7 +743,7 @@ data:
     }
 
     async function fetchRoutes() {
-      el('routesList').innerHTML = '<em>Loading...</em>';
+      el('routesList').innerHTML = '<div class="empty">Loading routes...</div>';
       try {
         const res = await fetch('/api/routes');
         const data = await res.json();
@@ -551,36 +755,42 @@ data:
         renderRoutes();
         updateTargetCount();
       } catch (e) {
-        el('routesList').innerHTML = '<span class="status-warn">Failed to load routes: ' + e + '</span>';
+        el('routesList').innerHTML = '<div class="empty warn">Failed to load routes: ' + esc(e) + '</div>';
       }
     }
 
     function renderRoutes() {
       if (!routes.length) {
-        el('routesList').innerHTML = '<em>No HTTPRoutes found.</em>';
+        el('routesList').innerHTML = '<div class="empty">No HTTPRoutes found in the cluster.</div>';
         return;
       }
       el('routesList').innerHTML = routes.map(function(r) {
+        const parts = (r.id || '').split('/');
+        const ns = parts[0] || r.namespace;
+        const name = parts[1] || r.name;
         const endpointRows = (r.targets || []).map(function(t) {
-          return '<div class="endpoint-item"><label><input type="checkbox" class="endpoint-cb" ' +
-            'data-hostname="' + esc(t.hostname) + '" data-path="' + esc(t.path) + '" ' +
-            'data-gateway="' + esc(t.gateway_url) + '" value="' + esc(t.id) + '"> ' +
-            esc(t.hostname) + ' <code>' + esc(t.path) + '</code></label></div>';
+          return '<label class="endpoint-tile">' +
+            '<input type="checkbox" class="endpoint-cb" data-hostname="' + esc(t.hostname) + '" data-path="' + esc(t.path) + '" data-gateway="' + esc(t.gateway_url) + '" value="' + esc(t.id) + '">' +
+            '<span class="endpoint-check">&#10003;</span>' +
+            '<span class="endpoint-info"><span class="endpoint-host">' + esc(t.hostname) + '</span><br><span class="endpoint-path">' + esc(t.path) + '</span></span>' +
+            '</label>';
         }).join('');
         return '<div class="route-group" data-route-id="' + esc(r.id) + '">' +
-          '<div class="route-header"><strong>' + esc(r.namespace) + '/' + esc(r.name) + '</strong>' +
-          '<button type="button" class="link-btn route-select-all">select all</button></div>' +
-          '<div class="route-meta">gateway: ' + esc(r.gateway) + '</div>' +
-          endpointRows + '</div>';
+          '<div class="route-top">' +
+            '<div class="route-title"><span class="ns-badge">' + esc(ns) + '</span><span class="route-name">' + esc(name) + '</span></div>' +
+            '<button type="button" class="btn-text route-select-all">Select all</button>' +
+          '</div>' +
+          '<div class="route-meta">Gateway: ' + esc(r.gateway) + '</div>' +
+          '<div class="endpoint-grid">' + endpointRows + '</div>' +
+          '</div>';
       }).join('');
 
-      document.querySelectorAll('.endpoint-cb').forEach(function(cb) {
-        cb.addEventListener('change', updateTargetCount);
-      });
+      bindEndpointTiles();
       document.querySelectorAll('.route-select-all').forEach(function(btn) {
         btn.onclick = function() {
           const group = btn.closest('.route-group');
           group.querySelectorAll('.endpoint-cb').forEach(function(cb) { cb.checked = true; });
+          bindEndpointTiles();
           updateTargetCount();
         };
       });
@@ -589,20 +799,14 @@ data:
     function selectedTargets() {
       const targets = [];
       document.querySelectorAll('.endpoint-cb:checked').forEach(function(cb) {
-        targets.push({
-          hostname: cb.dataset.hostname,
-          path: cb.dataset.path,
-          gateway_url: cb.dataset.gateway
-        });
+        targets.push({ hostname: cb.dataset.hostname, path: cb.dataset.path, gateway_url: cb.dataset.gateway });
       });
       const gwDefault = el('defaultGateway').value.trim() || defaultGateway;
       document.querySelectorAll('.custom-row').forEach(function(row) {
         const hostname = row.querySelector('.ce-hostname').value.trim();
         const path = row.querySelector('.ce-path').value.trim() || '/';
         const gateway_url = row.querySelector('.ce-gateway').value.trim() || gwDefault;
-        if (hostname && gateway_url) {
-          targets.push({ hostname: hostname, path: path, gateway_url: gateway_url });
-        }
+        if (hostname && gateway_url) targets.push({ hostname: hostname, path: path, gateway_url: gateway_url });
       });
       return targets;
     }
@@ -614,10 +818,10 @@ data:
 
     async function startTest() {
       const targets = selectedTargets();
-      if (!targets.length) { el('statusMsg').textContent = 'Select or add at least one endpoint.'; return; }
+      if (!targets.length) { setStatus('Select or add at least one endpoint.', 'warn'); return; }
       let headers = {};
       try { headers = parseJsonField(el('headers').value, {}); }
-      catch (e) { el('statusMsg').textContent = 'Invalid headers JSON.'; return; }
+      catch (e) { setStatus('Invalid headers JSON.', 'warn'); return; }
       const payload = {
         targets: targets,
         concurrent_users: +el('users').value,
@@ -628,11 +832,12 @@ data:
         body: el('body').value,
         headers: headers
       };
-      el('statusMsg').textContent = 'Starting test against ' + targets.length + ' endpoint(s)...';
+      setStatus('Starting test against ' + targets.length + ' endpoint(s)...', '');
       const res = await fetch('/api/test/start', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
       const data = await res.json();
-      if (!res.ok) { el('statusMsg').textContent = data.error || 'Start failed'; return; }
-      el('statusMsg').textContent = 'Test running against ' + targets.length + ' endpoint(s)...';
+      if (!res.ok) { setStatus(data.error || 'Start failed', 'warn'); return; }
+      setRunning(true);
+      setStatus('Test running against ' + targets.length + ' endpoint(s).', 'ok');
       el('startBtn').disabled = true;
       el('stopBtn').disabled = false;
       if (!pollTimer) pollTimer = setInterval(pollStatus, 1000);
@@ -640,44 +845,83 @@ data:
 
     async function stopTest() {
       await fetch('/api/test/stop', { method:'POST' });
-      el('statusMsg').textContent = 'Stopping...';
+      setStatus('Stopping test...', '');
     }
 
     function renderMetrics(m) {
+      const errPct = (m.error_rate * 100).toFixed(2);
       const items = [
-        ['Total requests', m.total_requests],
-        ['Req/s', m.requests_per_sec],
-        ['Avg latency (ms)', m.latency_avg_ms],
-        ['Min latency (ms)', m.latency_min_ms],
-        ['Max latency (ms)', m.latency_max_ms],
-        ['Error rate', (m.error_rate * 100).toFixed(2) + '%'],
-        ['Elapsed (s)', m.elapsed_sec],
-        ['Status codes', JSON.stringify(m.status_codes || {})]
+        { label:'Total requests', value:m.total_requests, cls:'' },
+        { label:'Throughput', value:m.requests_per_sec + ' req/s', cls:'ok' },
+        { label:'Avg latency', value:m.latency_avg_ms + ' ms', cls:'' },
+        { label:'Min / Max', value:m.latency_min_ms + ' / ' + m.latency_max_ms + ' ms', cls:'' },
+        { label:'Error rate', value:errPct + '%', cls: parseFloat(errPct) > 0 ? 'warn' : 'ok' },
+        { label:'Elapsed', value:m.elapsed_sec + ' s', cls:'' },
+        { label:'Status codes', value:'', codes: m.status_codes || {}, cls:'' }
       ];
-      el('metrics').innerHTML = items.map(function(pair) {
-        return '<div class="metric"><span>' + pair[0] + '</span><strong>' + pair[1] + '</strong></div>';
+      el('metrics').innerHTML = items.map(function(it) {
+        if (it.codes) {
+          const codes = Object.keys(it.codes).length
+            ? Object.entries(it.codes).map(function(e) { return e[0] + ': ' + e[1]; }).join(' · ')
+            : '—';
+          return '<div class="metric ' + it.cls + '"><span>' + it.label + '</span><strong>—</strong><small>' + esc(codes) + '</small></div>';
+        }
+        return '<div class="metric ' + it.cls + '"><span>' + it.label + '</span><strong>' + esc(it.value) + '</strong></div>';
       }).join('');
-      drawChart('throughputChart', m.throughput_history || [], 'rps', '#3d8bfd');
-      drawChart('latencyChart', m.latency_history || [], 'avg_ms', '#3dd68c');
+      drawChart('throughputChart', m.throughput_history || [], 'rps', ['#5b8cff', '#7c5cff']);
+      drawChart('latencyChart', m.latency_history || [], 'avg_ms', ['#2fd67a', '#18b86f']);
     }
 
-    function drawChart(canvasId, data, key, color) {
+    function drawChart(canvasId, data, key, colors) {
       const canvas = el(canvasId);
       const ctx = canvas.getContext('2d');
-      const w = canvas.width, h = canvas.height;
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.scale(dpr, dpr);
+      const w = rect.width, h = rect.height;
+      const pad = { l:42, r:12, t:14, b:24 };
       ctx.clearRect(0, 0, w, h);
-      ctx.strokeStyle = '#2d3a4d';
-      ctx.beginPath(); ctx.moveTo(40,10); ctx.lineTo(40,h-20); ctx.lineTo(w-10,h-20); ctx.stroke();
-      if (!data.length) return;
+
+      ctx.strokeStyle = 'rgba(255,255,255,.08)';
+      for (let i = 0; i <= 4; i++) {
+        const y = pad.t + (h - pad.t - pad.b) * (i / 4);
+        ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(w - pad.r, y); ctx.stroke();
+      }
+      ctx.beginPath(); ctx.moveTo(pad.l, pad.t); ctx.lineTo(pad.l, h - pad.b); ctx.lineTo(w - pad.r, h - pad.b); ctx.stroke();
+
+      if (!data.length) {
+        ctx.fillStyle = '#5c6f88';
+        ctx.font = '12px sans-serif';
+        ctx.fillText('Waiting for data...', pad.l + 8, h / 2);
+        return;
+      }
+
       const vals = data.map(function(d) { return d[key]; });
       const maxV = Math.max.apply(null, vals.concat([1]));
-      const xs = data.length > 1 ? (w - 50) / (data.length - 1) : 0;
-      ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.beginPath();
-      data.forEach(function(d, i) {
-        const x = 40 + i * xs;
-        const y = h - 20 - (d[key] / maxV) * (h - 40);
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      const plotW = w - pad.l - pad.r;
+      const plotH = h - pad.t - pad.b;
+      const xs = data.length > 1 ? plotW / (data.length - 1) : 0;
+      const points = data.map(function(d, i) {
+        return { x: pad.l + i * xs, y: h - pad.b - (d[key] / maxV) * plotH };
       });
+
+      const grad = ctx.createLinearGradient(0, pad.t, 0, h - pad.b);
+      grad.addColorStop(0, colors[0] + '55');
+      grad.addColorStop(1, colors[0] + '05');
+      ctx.beginPath();
+      points.forEach(function(p, i) { if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y); });
+      ctx.lineTo(points[points.length - 1].x, h - pad.b);
+      ctx.lineTo(points[0].x, h - pad.b);
+      ctx.closePath();
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      ctx.strokeStyle = colors[0];
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      points.forEach(function(p, i) { if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y); });
       ctx.stroke();
     }
 
@@ -686,9 +930,10 @@ data:
       const m = await res.json();
       renderMetrics(m);
       if (!m.running) {
+        setRunning(false);
         el('startBtn').disabled = false;
         el('stopBtn').disabled = true;
-        el('statusMsg').textContent = m.done ? 'Test finished.' : 'Test stopped.';
+        setStatus(m.done ? 'Test finished.' : 'Test stopped.', m.done ? 'ok' : '');
         clearInterval(pollTimer); pollTimer = null;
       }
     }
@@ -696,10 +941,12 @@ data:
     el('refreshBtn').onclick = fetchRoutes;
     el('selectAllBtn').onclick = function() {
       document.querySelectorAll('.endpoint-cb').forEach(function(c) { c.checked = true; });
+      bindEndpointTiles();
       updateTargetCount();
     };
     el('clearBtn').onclick = function() {
       document.querySelectorAll('.endpoint-cb').forEach(function(c) { c.checked = false; });
+      bindEndpointTiles();
       updateTargetCount();
     };
     el('addEndpointBtn').onclick = function() { addCustomRow('', '/', ''); };
@@ -708,6 +955,7 @@ data:
     el('stopBtn').onclick = stopTest;
     fetchRoutes();
     addCustomRow('', '/', '');
+    renderMetrics({ total_requests:0, requests_per_sec:0, latency_avg_ms:0, latency_min_ms:0, latency_max_ms:0, error_rate:0, elapsed_sec:0, status_codes:{}, throughput_history:[], latency_history:[] });
     </script>
     </body>
     </html>

@@ -30,7 +30,7 @@ spec:
       storage: 5Gi
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: postgres
   namespace: keycloak
@@ -39,6 +39,7 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "38"
 spec:
+  serviceName: postgres
   replicas: 1
   selector:
     matchLabels:

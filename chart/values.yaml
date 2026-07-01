@@ -1,11 +1,13 @@
 baseDns: rhcl.ocp.acme.com
 rhclVersion: 1.4.0
 helloWorldApp:
+  oidc:
+    enabled: true
   requestInterceptor:
     externalAuthorization:
-      enabled: true
+      enabled: false
     requestMirror:
-      enabled: true
+      enabled: false
 metallb:
   ipAddressPool:
     addresses:

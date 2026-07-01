@@ -3,7 +3,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: keycloak-bootstrap-admin
-  namespace: keycloak
+  namespace: rhbk
   annotations:
     argocd.argoproj.io/sync-wave: "39"
 type: Opaque
@@ -15,7 +15,7 @@ apiVersion: k8s.keycloak.org/v2alpha1
 kind: Keycloak
 metadata:
   name: keycloak
-  namespace: keycloak
+  namespace: rhbk
   annotations:
     argocd.argoproj.io/sync-wave: "39"
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
@@ -39,3 +39,14 @@ spec:
     hostname: https://keycloak.apps.cluster-65z4x.dynamic2.redhatworkshops.io
   http:
     httpEnabled: true
+  proxy:
+    headers: xforwarded
+  ingress:
+    enabled: true
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "1"
+      memory: 1700Mi

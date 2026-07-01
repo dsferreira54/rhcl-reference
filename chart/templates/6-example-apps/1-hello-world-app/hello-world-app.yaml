@@ -54,6 +54,9 @@ spec:
   parentRefs:
   - name: main-gateway
     namespace: istio-ingress
+    {{- if .Values.helloWorldApp.oidc.enabled }}
+    sectionName: hello-world-app
+    {{- end }}
   hostnames:
   - hello-world-app.{{ .Values.baseDns }}
   rules:
@@ -72,6 +75,32 @@ spec:
     backendRefs:
     - name: hello-world-app
       port: 8080
+{{- if .Values.helloWorldApp.oidc.enabled }}
+---
+apiVersion: extensions.kuadrant.io/v1alpha1
+kind: OIDCPolicy
+metadata:
+  name: hello-world-app
+  namespace: example-apps
+  annotations:
+    argocd.argoproj.io/sync-wave: "26"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: hello-world-app
+  provider:
+    issuerURL: https://keycloak.apps.cluster-65z4x.dynamic2.redhatworkshops.io/realms/rhcl
+    clientID: hello-world-app
+    authorizationEndpoint: https://keycloak.apps.cluster-65z4x.dynamic2.redhatworkshops.io/realms/rhcl/protocol/openid-connect/auth
+    tokenEndpoint: https://keycloak.apps.cluster-65z4x.dynamic2.redhatworkshops.io/realms/rhcl/protocol/openid-connect/token
+    redirectURI: http://hello-world-app.{{ .Values.baseDns }}/auth/callback
+  auth:
+    tokenSource:
+      cookie:
+        name: jwt
+{{- end }}
 ---
 apiVersion: kuadrant.io/v1
 kind: RateLimitPolicy
@@ -91,7 +120,7 @@ spec:
     group: gateway.networking.k8s.io
     kind: HTTPRoute
     name: hello-world-app
-{{- if .Values.helloWorldApp.requestInterceptor.externalAuthorization.enabled }}
+{{- if and (not .Values.helloWorldApp.oidc.enabled) .Values.helloWorldApp.requestInterceptor.externalAuthorization.enabled }}
 ---
 apiVersion: security.istio.io/v1
 kind: AuthorizationPolicy

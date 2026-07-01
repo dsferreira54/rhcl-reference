@@ -27,3 +27,12 @@ spec:
     allowedRoutes:
       namespaces:
         from: All
+  {{- if .Values.helloWorldApp.oidc.enabled }}
+  - name: hello-world-app
+    hostname: "hello-world-app.{{ .Values.baseDns }}"
+    port: 80
+    protocol: HTTP
+    allowedRoutes:
+      namespaces:
+        from: All
+  {{- end }}

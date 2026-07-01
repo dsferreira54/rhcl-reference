@@ -1,0 +1,40 @@
+---
+apiVersion: k8s.keycloak.org/v2alpha1
+kind: KeycloakRealmImport
+metadata:
+  name: rhcl-realm
+  namespace: rhbk
+  annotations:
+    argocd.argoproj.io/sync-wave: "40"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  keycloakCRName: keycloak
+  realm:
+    realm: rhcl
+    enabled: true
+    displayName: "RHCL PoC"
+    sslRequired: none
+    clients:
+      - clientId: hello-world-app
+        name: "Hello World App"
+        enabled: true
+        protocol: openid-connect
+        publicClient: true
+        standardFlowEnabled: true
+        directAccessGrantsEnabled: false
+        fullScopeAllowed: true
+        redirectUris:
+          - "*"
+        webOrigins:
+          - "*"
+    users:
+      - username: demo
+        enabled: true
+        emailVerified: true
+        email: demo@example.com
+        firstName: Demo
+        lastName: User
+        credentials:
+          - type: password
+            value: demo123
+            temporary: false

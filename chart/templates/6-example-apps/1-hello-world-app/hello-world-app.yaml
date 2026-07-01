@@ -95,7 +95,7 @@ spec:
     clientID: hello-world-app
     authorizationEndpoint: https://keycloak.{{ .Values.ingressDomain }}/realms/rhcl/protocol/openid-connect/auth
     tokenEndpoint: https://keycloak.{{ .Values.ingressDomain }}/realms/rhcl/protocol/openid-connect/token
-    redirectURI: http://hello-world-app.{{ .Values.baseDns }}/ping
+    redirectURI: http://hello-world-app.{{ .Values.baseDns }}/auth/callback
   auth:
     tokenSource:
       cookie:

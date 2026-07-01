@@ -13,6 +13,22 @@ stringData:
   username: keycloak
   password: keycloak-demo-pass
 ---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  namespace: keycloak
+  labels:
+    app: postgres
+  annotations:
+    argocd.argoproj.io/sync-wave: "38"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -34,26 +50,28 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: quay.io/sclorg/postgresql-15-c9s:latest
+          image: docker.io/postgres:15
           imagePullPolicy: IfNotPresent
           env:
-            - name: POSTGRESQL_USER
+            - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
                   name: keycloak-db-secret
                   key: username
-            - name: POSTGRESQL_PASSWORD
+            - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: keycloak-db-secret
                   key: password
-            - name: POSTGRESQL_DATABASE
+            - name: POSTGRES_DB
               value: keycloak
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
           ports:
             - containerPort: 5432
           readinessProbe:
             exec:
-              command: ["sh", "-c", "pg_isready -h 127.0.0.1 -p 5432"]
+              command: ["pg_isready", "-U", "keycloak", "-d", "keycloak"]
             initialDelaySeconds: 5
             periodSeconds: 10
           resources:
@@ -62,10 +80,11 @@ spec:
               memory: 256Mi
           volumeMounts:
             - name: data
-              mountPath: /var/lib/pgsql/data
+              mountPath: /var/lib/postgresql/data
       volumes:
         - name: data
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: postgres-data
 ---
 apiVersion: v1
 kind: Service

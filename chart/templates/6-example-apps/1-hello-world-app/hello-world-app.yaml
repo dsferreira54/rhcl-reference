@@ -91,10 +91,10 @@ spec:
     kind: HTTPRoute
     name: hello-world-app
   provider:
-    issuerURL: https://keycloak.apps.cluster-65z4x.dynamic2.redhatworkshops.io/realms/rhcl
+    issuerURL: https://keycloak.apps.cluster-lx4g9.dynamic2.redhatworkshops.io/realms/rhcl
     clientID: hello-world-app
-    authorizationEndpoint: https://keycloak.apps.cluster-65z4x.dynamic2.redhatworkshops.io/realms/rhcl/protocol/openid-connect/auth
-    tokenEndpoint: https://keycloak.apps.cluster-65z4x.dynamic2.redhatworkshops.io/realms/rhcl/protocol/openid-connect/token
+    authorizationEndpoint: https://keycloak.apps.cluster-lx4g9.dynamic2.redhatworkshops.io/realms/rhcl/protocol/openid-connect/auth
+    tokenEndpoint: https://keycloak.apps.cluster-lx4g9.dynamic2.redhatworkshops.io/realms/rhcl/protocol/openid-connect/token
     redirectURI: http://hello-world-app.{{ .Values.baseDns }}/auth/callback
   auth:
     tokenSource:

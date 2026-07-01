@@ -1,4 +1,5 @@
 baseDns: rhcl.ocp.acme.com
+ingressDomain: apps.ocp.acme.com
 rhclVersion: 1.4.0
 helloWorldApp:
   oidc:

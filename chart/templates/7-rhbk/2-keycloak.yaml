@@ -36,7 +36,7 @@ spec:
       name: keycloak-db-secret
       key: password
   hostname:
-    hostname: https://keycloak.apps.cluster-lx4g9.dynamic2.redhatworkshops.io
+    hostname: https://keycloak.{{ .Values.ingressDomain }}
   http:
     httpEnabled: true
   proxy:

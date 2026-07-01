@@ -43,6 +43,9 @@ spec:
   parentRefs:
     - name: main-gateway
       namespace: istio-ingress
+      {{- if .Values.helloWorldApp.oidc.enabled }}
+      sectionName: external-app
+      {{- end }}
   hostnames:
     - external-app.{{ .Values.baseDns }}
   rules:

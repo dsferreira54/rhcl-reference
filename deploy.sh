@@ -54,11 +54,17 @@ EOF
 INGRESS_DOMAIN="$(oc get ingresses.config.openshift.io cluster -o jsonpath='{.spec.domain}')"
 RHCL_BASE_DNS="${INGRESS_DOMAIN/#apps./rhcl.}"
 
+if [ -z "$INGRESS_DOMAIN" ]; then
+  echo "Error: unable to retrieve the OpenShift ingress domain."
+  exit 1
+fi
+
 if [ -z "$RHCL_BASE_DNS" ]; then
   echo "Error: unable to retrieve the OpenShift base DNS."
   exit 1
 fi
 
+echo "OpenShift ingress domain set to: ${INGRESS_DOMAIN}"
 echo "RHCL base DNS set to: ${RHCL_BASE_DNS}"
 
 echo "Detecting available MetalLB IP address pool on the machine network..."
@@ -182,6 +188,8 @@ spec:
       parameters:
         - name: baseDns
           value: "${RHCL_BASE_DNS}"
+        - name: ingressDomain
+          value: "${INGRESS_DOMAIN}"
         - name: metallb.ipAddressPool.addresses[0]
           value: "${METALLB_IP_POOL}"
   destination:

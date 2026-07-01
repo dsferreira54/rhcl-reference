@@ -20,16 +20,26 @@ metadata:
 spec:
   gatewayClassName: istio
   listeners:
-  - name: http
-    hostname: "*.{{ .Values.baseDns }}"
+  {{- if .Values.helloWorldApp.oidc.enabled }}
+  # OIDCPolicy cannot use a wildcard listener — it derives cookie Domain and
+  # post-login redirect from the gateway hostname (Kuadrant #1504).
+  - name: hello-world-app
+    hostname: "hello-world-app.{{ .Values.baseDns }}"
     port: 80
     protocol: HTTP
     allowedRoutes:
       namespaces:
         from: All
-  {{- if .Values.helloWorldApp.oidc.enabled }}
-  - name: hello-world-app
-    hostname: "hello-world-app.{{ .Values.baseDns }}"
+  - name: external-app
+    hostname: "external-app.{{ .Values.baseDns }}"
+    port: 80
+    protocol: HTTP
+    allowedRoutes:
+      namespaces:
+        from: All
+  {{- else }}
+  - name: http
+    hostname: "*.{{ .Values.baseDns }}"
     port: 80
     protocol: HTTP
     allowedRoutes:

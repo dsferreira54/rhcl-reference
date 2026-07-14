@@ -6,9 +6,9 @@ helloWorldApp:
     enabled: true
   requestInterceptor:
     externalAuthorization:
-      enabled: false
+      enabled: true
     requestMirror:
-      enabled: false
+      enabled: true
 metallb:
   ipAddressPool:
     addresses:

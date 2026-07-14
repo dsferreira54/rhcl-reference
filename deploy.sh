@@ -76,7 +76,7 @@ import re
 import subprocess
 import sys
 
-POOL_SIZE = 1
+POOL_SIZE = 10
 
 
 def oc_json(args):
